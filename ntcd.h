@@ -2,12 +2,17 @@
 #ifndef __NTCD_H__
 #define __NTCD_H__
 
+//NOTE: best way to name structs?
+//NOTE: Can I define ntcd_transform_t in the implementation and still be visible?
+
 //TODO: Make ntcd_transform_t customizable
 typedef struct{
     double pos[3];
     double rot[4];
     double size;
 }ntcd_transform_t;
+
+typedef void (*support_t)(double*, const void*, const double*);
 
 int ntcd_gjk_boolean(const ntcd_transform_t*, const void*, const ntcd_transform_t*, const void*);
 void ntcd_gjk_distance(const ntcd_transform_t*, const void*, const ntcd_transform_t*, const void*, double* dist_vec);
@@ -33,6 +38,8 @@ int main(int argc, char* argv[]){
 
 #define BARY_GEPP
 
+//Vectors
+
 static inline double ntcd__vec3_dot(const double* a, const double* b){
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
@@ -43,6 +50,7 @@ static inline void ntcd__vec3_cross(double* c, const double* a, const double* b)
     c[2] = a[0] * b[1] - a[1] * b[0];
 }
 
+//Calculates d = (a x b) x c
 static inline void ntcd__vec3_triple_product(double* d, const double* a, const double* b, const double* c){
     d[0] = b[0] * ntcd__vec3_dot(a, c) - a[0] * ntcd__vec3_dot(b, c);
     d[1] = b[1] * ntcd__vec3_dot(a, c) - a[1] * ntcd__vec3_dot(b, c);
@@ -61,6 +69,12 @@ static inline void ntcd__vec3_sub(double* c, const double* a, const double* b){
     c[2] = a[2] - b[2];
 }
 
+static inline void ntcd__vec3_smul(double* c, double f, const double* a){
+    c[0] = f * a[0];
+    c[1] = f * a[1];
+    c[2] = f * a[2];
+}
+
 static inline double ntcd__vec3_length2(const double* vec){
     return vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2];
 }
@@ -68,6 +82,32 @@ static inline double ntcd__vec3_length2(const double* vec){
 //TODO: Try memcmp performance
 static inline int ntcd__vec3_equal(const double* a, const double* b){
     return (a[0] == b[0]) && (a[1] == b[1]) && (a[2] == b[2]);
+}
+
+// Quaternions
+
+//TODO: Do we really need to calculate the length? Aren't all quaternions assumed of unit length?
+static inline void ntcd__quat_inverse(double* r, const double* q){
+    double ilength2 = 1.0  / (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+    for(int i = 0; i < 3; ++i) r[i] = -q[i] * ilength2;
+    r[3] = q[3] * ilength2;
+}
+
+static inline void ntcd__quat_vec3_rotate(double* r, const double* q, const double* v){
+    double u[3];
+    {
+        double a[3], b[3], c[3];
+        ntcd__vec3_cross(a, q, v);
+        ntcd__vec3_smul(b, q[3], v);
+        ntcd__vec3_add(c, a, b);
+        ntcd__vec3_cross(u, q, c);
+    }
+
+    for(int i = 0; i < 3; ++i) r[i] = v[i] + 2.0 * u[i];
+
+    //r[0] = v[0] + 2.0 * (q[1] * (q[0] * v[1] - q[1] * v[0] + q[3] * v[2]) - q[2] * (q[2] * v[0] - q[0] * v[2] + q[3] * v[1]));
+    //r[1] = v[1] + 2.0 * (q[2] * (q[1] * v[2] - q[2] * v[1] + q[3] * v[0]) - q[0] * (q[0] * v[1] - q[1] * v[0] + q[3] * v[2]));
+    //r[2] = v[2] + 2.0 * (q[0] * (q[2] * v[0] - q[0] * v[2] + q[3] * v[1]) - q[1] * (q[1] * v[2] - q[2] * v[1] + q[3] * v[0]));
 }
 
 //Lookup table which tells us at which positions in the simplex array
@@ -200,7 +240,7 @@ static inline void ntcd__simplex_remove_point(ntcd__simplex_t* simplex, int p){
     --simplex->size_;
 }
 
-int ntcd__simplex_contains(const ntcd__simplex_t* simplex, const double* point){
+static inline int ntcd__simplex_contains(const ntcd__simplex_t* simplex, const double* point){
     unsigned char bits = simplex->bits_;
     for(int i = 0; i < 4; ++i, bits >>= 1){
         if((bits & 1) && ntcd__vec3_equal(simplex->p_ + 3 * i, point)) return 1;
@@ -208,7 +248,7 @@ int ntcd__simplex_contains(const ntcd__simplex_t* simplex, const double* point){
     return 0;
 }
 
-void ntcd__simplex_translate(ntcd__simplex_t* simplex, const double* dr){
+static inline void ntcd__simplex_translate(ntcd__simplex_t* simplex, const double* dr){
     //for(int k = 0; k < 4; ++k) p_[k] += dr;
     simplex->max_vert2_ = 0.0;
     unsigned char bits = simplex->bits_;
@@ -220,7 +260,7 @@ void ntcd__simplex_translate(ntcd__simplex_t* simplex, const double* dr){
     }
 }
 
-void ntcd__simplex_compute_closest_points(ntcd__simplex_t* simplex, double* pa, double* pb, const double* P){
+static void ntcd__simplex_compute_closest_points(ntcd__simplex_t* simplex, double* pa, double* pb, const double* P){
     switch(simplex->size_){
     //IMPORTANT: We are having accuracy problems with this projection.
     case 3:{
@@ -281,6 +321,487 @@ void ntcd__simplex_compute_closest_points(ntcd__simplex_t* simplex, double* pa, 
     default:
         break;
     }
+}
+
+static void ntcd__simplex_closest(ntcd__simplex_t* simplex, double* dir){
+    ///////////////////////////////////////////////
+    //  Check if the origin is contained in the  //
+    //  Minkowski sum.                           //
+    ///////////////////////////////////////////////
+    switch(simplex->size_){
+    case 4:
+    {
+        const unsigned char* pos = p_pos[(simplex->bits_ ^ (1 << simplex->last_sb_))];
+
+        const double* a = simplex->p_ + 3 * simplex->last_sb_;
+        const double* b = simplex->p_ + 3 * pos[0];
+        const double* c = simplex->p_ + 3 * pos[1];
+        const double* d = simplex->p_ + 3 * pos[2];
+
+        double ab[3], ac[3], ad[3];
+        ntcd__vec3_sub(ab, b, a);
+        ntcd__vec3_sub(ac, c, a);
+        ntcd__vec3_sub(ad, d, a);
+
+        ////////////////////* Vertex Case *///////////////////
+
+        double dot_aba = ntcd__vec3_dot(ab, a);
+        double dot_aca = ntcd__vec3_dot(ac, a);
+        double dot_ada = ntcd__vec3_dot(ad, a);
+
+        if(dot_aba >= 0.0 && dot_aca >= 0.0 && dot_ada >= 0.0){
+            memcpy(dir, a, 3 * sizeof(*dir)); //Take direction passing through origin
+            ntcd__simplex_remove_point(simplex, pos[0]);
+            ntcd__simplex_remove_point(simplex, pos[1]);
+            ntcd__simplex_remove_point(simplex, pos[2]);
+            break;
+        }
+
+        ////////////////////* Edge Cases *///////////////////
+
+        /* ab Edge case */
+        double dot_abb = ntcd__vec3_dot(ab, b);
+        double dot_abPerp1 = dot_aba * ntcd__vec3_dot(ac, b) - dot_abb * dot_aca;
+        double dot_abPerp2 = dot_aba * ntcd__vec3_dot(ad, b) - dot_abb * dot_ada;
+        // The origin must be inside the space defined by the intersection
+        // of two half-space normal to the adjacent faces abc, abd
+        if(dot_abPerp1 <= 0.0 && dot_abPerp2 <= 0.0 && dot_aba <= 0.0){
+            double f = dot_aba / (dot_aba - dot_abb);
+            for(int i = 0; i < 3; ++i) dir[i] = a[i] + f * ab[i];
+            ntcd__simplex_remove_point(simplex, pos[1]);
+            ntcd__simplex_remove_point(simplex, pos[2]);
+            break;
+        }
+
+        /* ac Edge case */
+        double dot_acc = ntcd__vec3_dot(ac, c);
+        double dot_acPerp1 = dot_aca * ntcd__vec3_dot(ad, c) - dot_acc * dot_ada;
+        double dot_acPerp2 = dot_aca * ntcd__vec3_dot(ab, c) - dot_acc * dot_aba;
+        // The origin must be inside the space defined by the intersection
+        // of two half-space normal to the adjacent faces abc, acd
+        if(dot_acPerp1 <= 0.0 && dot_acPerp2 <= 0.0 && dot_aca <= 0.0){
+            double f = dot_aca / (dot_aca - dot_acc);
+            for(int i = 0; i < 3; ++i) dir[i] = a[i] + f * ac[i];
+            ntcd__simplex_remove_point(simplex, pos[0]);
+            ntcd__simplex_remove_point(simplex, pos[2]);
+            break;
+        }
+
+        /* ad Edge case */
+        double dot_add = ntcd__vec3_dot(ad, d);
+        double dot_adPerp1 = dot_ada * ntcd__vec3_dot(ab, d) - dot_add * dot_aba;
+        double dot_adPerp2 = dot_ada * ntcd__vec3_dot(ac, d) - dot_add * dot_aca;
+        // The origin must be inside the space defined by the intersection
+        // of two half-space normal to the adjacent faces acd, abd
+        if(dot_adPerp1 <= 0.0 && dot_adPerp2 <= 0.0 && dot_ada <= 0.0){
+            double f = dot_ada / (dot_ada - dot_add);
+            for(int i = 0; i < 3; ++i) dir[i] = a[i] + f * ad[i];
+            ntcd__simplex_remove_point(simplex, pos[0]);
+            ntcd__simplex_remove_point(simplex, pos[1]);
+            break;
+        }
+
+        ////////////////////* Face Cases *///////////////////
+
+        /* On abc side */
+        // The origin should be on abc's side and between the half-spaces defined by ac and ab (normal to abc)
+        {
+            double abxac[3];
+            ntcd__vec3_cross(abxac, ab, ac);
+            if(ntcd__vec3_dot(ad, abxac) * ntcd__vec3_dot(a, abxac) > 0.0 && dot_abPerp1 >= 0.0 && dot_acPerp2 >= 0.0){
+                /* Remove point d */
+                ntcd__simplex_remove_point(simplex, pos[2]);
+                double f = ntcd__vec3_dot(dir, a) / ntcd__vec3_length2(dir);
+                if(ntcd__vec3_dot(ad, abxac) > 0.0) ntcd__vec3_smul(dir, -f, abxac);
+                else ntcd__vec3_smul(dir, f, abxac);
+                break;
+            }
+        }
+
+        /* On abd side */
+        // The origin should be on abd's side and between the half-spaces defined by ab and ad (normal to abd)
+        {
+            double abxad[3];
+            ntcd__vec3_cross(abxad, ab, ad);
+            if(ntcd__vec3_dot(ac, abxad) * ntcd__vec3_dot(a, abxad) > 0.0 && dot_abPerp2 >= 0.0 && dot_adPerp1 >= 0.0){
+                /* Remove point c */
+                ntcd__simplex_remove_point(simplex, pos[1]);
+                double f = ntcd__vec3_dot(dir, a) / ntcd__vec3_length2(dir);
+                if(ntcd__vec3_dot(ac, abxad) > 0.0) ntcd__vec3_smul(dir, -f, abxad);
+                else ntcd__vec3_smul(dir, f, abxad);
+                break;
+            }
+        }
+
+        ///* On acd side */
+        // The origin should be on acd's side and between the half-spaces defined by ac and ad (normal to acd)
+        {
+            double acxad[3];
+            ntcd__vec3_cross(acxad, ac, ad);
+            if(ntcd__vec3_dot(ab, acxad) * ntcd__vec3_dot(a, acxad) > 0.0 && dot_acPerp1 >= 0.0 && dot_adPerp2 >= 0.0){
+                /* Remove point b */
+                ntcd__simplex_remove_point(simplex, pos[0]);
+                double f = ntcd__vec3_dot(dir, a) / ntcd__vec3_length2(dir);
+                if(ntcd__vec3_dot(ab, acxad) > 0.0) ntcd__vec3_smul(dir, -f, acxad);
+                else ntcd__vec3_smul(dir, f, acxad);
+                break;
+            }
+        }
+
+        ///* On bcd side */
+        //// The origin should be on bcd's side
+        {
+            double bc[3], bd[3], bcxbd[3];
+            ntcd__vec3_sub(bc, c, b);
+            ntcd__vec3_sub(bd, d, b);
+            ntcd__vec3_cross(bcxbd, bc, bd);
+            if(ntcd__vec3_dot(bcxbd, ab) * ntcd__vec3_dot(bcxbd, b) < 0.0){
+                /* Remove point a */
+                ntcd__simplex_remove_point(simplex, simplex->last_sb_);
+                simplex->last_sb_ = pos[0];
+                double f = ntcd__vec3_dot(dir, b) / ntcd__vec3_length2(dir);
+                if(ntcd__vec3_dot(ab, bcxbd) < 0.0) ntcd__vec3_smul(dir, -f, bcxbd);
+                else ntcd__vec3_smul(dir, f, bcxbd);
+                break;
+            }
+        }
+
+        /* 'else' should only be when the origin is inside the tetrahedron */
+        break;
+    }
+    case 3:
+    {
+        const unsigned char* pos = p_pos[(simplex->bits_ ^ (1 << simplex->last_sb_))];
+
+        const double* a = simplex->p_ + 3 * simplex->last_sb_;
+        const double* b = simplex->p_ + 3 * pos[0];
+        const double* c = simplex->p_ + 3 * pos[1];
+
+        double ab[3], ac[3];
+        ntcd__vec3_sub(ab, b, a);
+        ntcd__vec3_sub(ac, c, a);
+
+        // Check if O in vertex region A
+        double dot_aba = -ntcd__vec3_dot(ab, a);
+        double dot_aca = -ntcd__vec3_dot(ac, a);
+        if(dot_aba <= 0.0 && dot_aca <= 0.0){
+            memcpy(dir, a, 3 * sizeof(*dir)); //Take direction passing through origin
+            ntcd__simplex_remove_point(simplex, pos[0]);
+            ntcd__simplex_remove_point(simplex, pos[1]);
+            break;
+        }
+
+        // Check if O in edge region AB
+        double dot_abb = -ntcd__vec3_dot(ab, b);
+        double dot_acb = -ntcd__vec3_dot(ac, b);
+        double vc = dot_aba * dot_acb - dot_abb * dot_aca;
+        if(vc <= 0.0 && dot_aba >= 0.0 && dot_abb <= 0.0){
+            double f = dot_aba / (dot_aba - dot_abb);
+            for(int i = 0; i < 3; ++i) dir[i] = a[i] + f * ab[i];
+            /* Remove Point c */
+            ntcd__simplex_remove_point(simplex, pos[1]);
+            break;
+        }
+
+        // Check if O in edge region AC
+        double dot_abc = -ntcd__vec3_dot(ab, c);
+        double dot_acc = -ntcd__vec3_dot(ac, c);
+        double vb = dot_abc * dot_aca - dot_aba * dot_acc;
+        if(vb <= 0.0 && dot_aca >= 0.0 && dot_acc <= 0.0){
+            double w = dot_aca / (dot_aca - dot_acc);
+            for(int i = 0; i < 3; ++i) dir[i] = a[i] + w * ac[i];
+            /* Remove Point b */
+            ntcd__simplex_remove_point(simplex, pos[0]);
+            break;
+        }
+
+        double va = dot_abb * dot_acc - dot_abc * dot_acb;
+        double w = 1.0 / (va + vb + vc);
+        for(int i = 0; i < 3; ++i) dir[i] = a[i] + (ab[i] * vb + ac[i] * vc) * w;
+        break;
+    }
+    case 2:
+    {
+        const unsigned char* pos = p_pos[(simplex->bits_ ^ (1 << simplex->last_sb_))];
+
+        const double* a = simplex->p_ + 3 * simplex->last_sb_;
+        const double* b = simplex->p_ + 3 * pos[0];
+
+        double  ab[3];
+        ntcd__vec3_add(ab, b, a);
+
+        double t = -ntcd__vec3_dot(ab, a);
+        if(t <= 0.0){
+            memcpy(dir, a, 3 * sizeof(*dir)); //Take direction passing through origin
+            ntcd__simplex_remove_point(simplex, pos[0]);
+            break;
+        }
+
+        double denom = ntcd__vec3_length2(ab);
+        if(t >= denom){
+            ntcd__simplex_remove_point(simplex, simplex->last_sb_);
+            simplex->last_sb_ = pos[0];
+            memcpy(dir, b, 3 * sizeof(*dir));
+            break;
+        }
+
+        for(int i = 0; i < 3; ++i) dir[i] = a[i] + ab[i] * (t / denom);
+        break;
+    }
+    case 1:
+    {
+        memcpy(dir, simplex->p_ + 3 * simplex->last_sb_, 3 * sizeof(*dir));
+        break;
+    }
+    default: break;
+    }
+}
+
+//TODO: dir -> -dir
+static int ntcd__simplex_contains_origin(ntcd__simplex_t* simplex, double* dir){
+    ///////////////////////////////////////////////
+    //  Check if the origin is contained in the  //
+    //  Minkowski sum.                           //
+    ///////////////////////////////////////////////
+    switch(simplex->size_){
+    case 4:
+    {
+        const unsigned char* pos = p_pos[(simplex->bits_ ^ (1 << simplex->last_sb_))];
+
+        const double* a = simplex->p_ + 3 * simplex->last_sb_;
+        const double* b = simplex->p_ + 3 * pos[0];
+        const double* c = simplex->p_ + 3 * pos[1];
+        const double* d = simplex->p_ + 3 * pos[2];
+
+        double ab[3], ac[3], ad[3];
+        ntcd__vec3_sub(ab, b, a);
+        ntcd__vec3_sub(ac, c, a);
+        ntcd__vec3_sub(ad, d, a);
+
+        ////////////////////* Face Cases *///////////////////
+
+        /* On abc side */
+        double abxac[3];
+        ntcd__vec3_cross(abxac, ab, ac);
+        int abPerp1Pos, acPerp2Pos;
+        {
+            double cross_temp_a[3], cross_temp_b[3];
+            ntcd__vec3_cross(cross_temp_a, abxac, ab);
+            ntcd__vec3_cross(cross_temp_b, ac, abxac);
+            abPerp1Pos = (ntcd__vec3_dot(cross_temp_a, a) > 0.0);
+            acPerp2Pos = (ntcd__vec3_dot(cross_temp_b, a) > 0.0);
+        }
+        // The origin should be on abc's side and between the half-spaces defined by ac and ab (normal to abc)
+        {
+            double abcPerp[3];
+            if(ntcd__vec3_dot(abxac, ad) > 0.0) ntcd__vec3_smul(abcPerp, -1.0, abxac);
+            else memcpy(abcPerp, abxac, 3 * sizeof(*abcPerp));
+
+            if((ntcd__vec3_dot(abcPerp, a) < 0.0) && !abPerp1Pos && !acPerp2Pos){
+                /* Remove point d */
+                ntcd__simplex_remove_point(simplex, pos[2]);
+                memcpy(dir, abcPerp, 3 * sizeof(*dir));
+                break;
+            }
+        }
+
+        /* On abd side */
+        double abxad[3];
+        ntcd__vec3_cross(abxad, ab, ad);
+        int abPerp2Pos, adPerp1Pos;
+        {
+            double cross_temp_a[3], cross_temp_b[3];
+            ntcd__vec3_cross(cross_temp_a, abxad, ab);
+            ntcd__vec3_cross(cross_temp_b, ad, abxad);
+            abPerp2Pos = (ntcd__vec3_dot(cross_temp_a, a) > 0.0);
+            adPerp1Pos = (ntcd__vec3_dot(cross_temp_b, a) > 0.0);
+        }
+        // The origin should be on abd's side and between the half-spaces defined by ab and ad (normal to abd)
+        {
+            double abdPerp[3];
+            if(ntcd__vec3_dot(abxad, ac) > 0.0) ntcd__vec3_smul(abdPerp, -1.0, abxad);
+            else memcpy(abdPerp, abxad, 3 * sizeof(*abdPerp));
+
+            if((ntcd__vec3_dot(abdPerp, a) < 0.0) && !abPerp2Pos && !adPerp1Pos){
+                /* Remove point c */
+                ntcd__simplex_remove_point(simplex, pos[1]);
+                memcpy(dir, abdPerp, 3 * sizeof(*dir));
+                break;
+            }
+        }
+
+        /* On acd side */
+        double acxad[3];
+        ntcd__vec3_cross(acxad, ac, ad);
+        int acPerp1Pos, adPerp2Pos;
+        {
+            double cross_temp_a[3], cross_temp_b[3];
+            ntcd__vec3_cross(cross_temp_a, acxad, ac);
+            ntcd__vec3_cross(cross_temp_b, ad, acxad);
+            acPerp1Pos = (ntcd__vec3_dot(cross_temp_a, a) > 0.0);
+            adPerp2Pos = (ntcd__vec3_dot(cross_temp_b, a) > 0.0);
+        }
+        // The origin should be on acd's side and between the half-spaces defined by ac and ad (normal to acd)
+        {
+            double acdPerp[3];
+            if(ntcd__vec3_dot(acxad, ab) > 0.0) ntcd__vec3_smul(acdPerp, -1.0, acxad);
+            else memcpy(acdPerp, acxad, 3 * sizeof(*acdPerp));
+
+            if((ntcd__vec3_dot(acdPerp, a) < 0.0) && !acPerp1Pos && !adPerp2Pos){
+                /* Remove point b */
+                ntcd__simplex_remove_point(simplex, pos[0]);
+                memcpy(dir, acdPerp, 3 * sizeof(*dir));
+                break;
+            }
+        }
+
+        ////////////////////* Edge Cases *///////////////////
+
+        /* ab Edge case */
+        // The origin must be inside the space defined by the intersection
+        // of two half-space normal to the adjacent faces abc, abd
+        if(abPerp1Pos && abPerp2Pos){
+            ntcd__vec3_triple_product(dir, a, ab, ab);
+            ntcd__simplex_remove_point(simplex, pos[1]);
+            ntcd__simplex_remove_point(simplex, pos[2]);
+            break;
+        }
+
+        /* ac Edge case */
+        // The origin must be inside the space defined by the intersection
+        // of two half-space normal to the adjacent faces abc, acd
+        if(acPerp1Pos && acPerp2Pos){
+            ntcd__vec3_triple_product(dir, a, ac, ac);
+            ntcd__simplex_remove_point(simplex, pos[0]);
+            ntcd__simplex_remove_point(simplex, pos[2]);
+            break;
+        }
+
+        /* ad Edge case */
+        // The origin must be inside the space defined by the intersection
+        // of two half-space normal to the adjacent faces acd, abd
+        if(adPerp1Pos && adPerp2Pos){
+            ntcd__vec3_triple_product(dir, a, ad, ad);
+            ntcd__simplex_remove_point(simplex, pos[0]);
+            ntcd__simplex_remove_point(simplex, pos[1]);
+            break;
+        }
+
+        /* 'else' should only be when the origin is inside the tetrahedron */
+        return 1;
+    }
+    case 3:
+    {
+        const unsigned char* pos = p_pos[(simplex->bits_ ^ (1 << simplex->last_sb_))];
+
+        const double* a = simplex->p_ + 3 * simplex->last_sb_;
+        const double* b = simplex->p_ + 3 * pos[0];
+        const double* c = simplex->p_ + 3 * pos[1];
+
+        double ab[3], ac[3], abxac[3];
+        ntcd__vec3_sub(ab, b, a);
+        ntcd__vec3_sub(ac, c, a);
+        ntcd__vec3_cross(abxac, ab, ac);
+
+        ////////////////////* Edge Cases *///////////////////
+
+        /* Origin on the outside of triangle and close to ab */
+        double cross_temp[3];
+        ntcd__vec3_cross(cross_temp, ab, abxac);
+        if(ntcd__vec3_dot(cross_temp, a) < 0.0){
+            ntcd__vec3_triple_product(dir, a, ab, ab);
+            /* Remove Point c */
+            ntcd__simplex_remove_point(simplex, pos[1]);
+            break;
+        }
+
+        /* Origin on the outside of triangle and close to ac */
+        ntcd__vec3_cross(cross_temp, abxac, ac);
+        if(ntcd__vec3_dot(cross_temp, a) < 0.0){
+            ntcd__vec3_triple_product(dir, a, ac, ac);
+            /* Remove Point b */
+            ntcd__simplex_remove_point(simplex, pos[0]);
+            break;
+        }
+
+        /////////////////////* Face Case *///////////////////
+        if(ntcd__vec3_dot(abxac, a) > 0.0) ntcd__vec3_smul(dir, -1.0, abxac);
+        else memcpy(dir, abxac, 3 * sizeof(*dir));
+        break;
+    }
+    case 2:
+    {
+        const unsigned char* pos = p_pos[(simplex->bits_ ^ (1 << simplex->last_sb_))];
+
+        const double* a = simplex->p_ + 3 * simplex->last_sb_;
+        const double* b = simplex->p_ + 3 * pos[0];
+
+        double ab[3];
+        ntcd__vec3_sub(ab, b, a);
+
+        ntcd__vec3_triple_product(dir, a, ab, ab);
+        break;
+    }
+    case 1:
+    {
+        const double* a = simplex->p_ + 3 * simplex->last_sb_;
+        for(int i = 0; i < 3; ++i) dir[i] = -a[i];
+        break;
+    }
+    default: break;
+    }
+
+    return 0;
+}
+
+int ntcd_gjk_boolean(
+    const ntcd_transform_t* pa, const void* ca,
+    const ntcd_transform_t* pb, const void* cb
+){
+    double dir[3];
+    ntcd__vec3_sub(dir, pb->pos, pa->pos);
+    ntcd__simplex_t simplex;
+
+    unsigned int fail_safe = 0;
+
+    double inv_rot_a[4], inv_rot_b[4];
+    ntcd__quat_inverse(inv_rot_a, pa->rot);
+    ntcd__quat_inverse(inv_rot_b, pb->rot);
+
+    support_t sa = *(const support_t*)ca;
+    support_t sb = *(const support_t*)cb;
+
+    do{
+        double vertex_a[3];
+        {
+            double inv_dir[3], support[3];
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_a, dir);
+            sa(support, ca, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_a, pa->rot, support);
+            for(int i = 0; i < 3; ++i) vertex_a[i] = pa->pos[i] + pa->size * vertex_a[i];
+        }
+
+        double vertex_b[3];
+        {
+            double inv_dir[3], support[3];
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_b, dir);
+            ntcd__vec3_smul(inv_dir, -1.0, inv_dir);
+            sb(support, cb, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_b, pb->rot, support);
+            for(int i = 0; i < 3; ++i) vertex_b[i] = pb->pos[i] + pb->size * vertex_b[i];
+        }
+
+        double new_point[3];
+        ntcd__vec3_sub(new_point, vertex_a, vertex_b);
+        double dn = ntcd__vec3_dot(dir, new_point);
+        if(dn < 0.0 || ntcd__simplex_contains(&simplex, new_point)) return 0;
+        ntcd__simplex_add_point(&simplex, new_point);
+        if(ntcd__simplex_contains_origin(&simplex, dir) || ntcd__vec3_length2(dir) == 0.0) return 1;
+    }while(fail_safe++ < 100);
+
+    //printf("Encountered error in GJK boolean: Infinite Loop.\n Direction (%f, %f, %f)\n", dir[0], dir[1], dir[2]);
+
+    return 1;
 }
 
 #endif //NTCD_IMPLEMENTATION
