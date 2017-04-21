@@ -18,13 +18,38 @@ int ntcd_gjk_boolean(const ntcd_transform*, const void*, const ntcd_transform*, 
 void ntcd_gjk_distance(const ntcd_transform*, const void*, const ntcd_transform*, const void*, double* dist_vec);
 int ntcd_gjk_raycast(const ntcd_transform*, const void*, const ntcd_transform*, const void*, const double* ray_dir, double* distance, double* normal);
 
+typedef struct{
+    ntcd_support support;
+    double base_radius_, half_height_;
+}ntcd_cylinder;
+void ntcd_init_cylinder(ntcd_cylinder* cyl, double base_radius, double height);
+
 //Test
 #if 1
 #define NTCD_IMPLEMENTATION
 #include "ntcd.h"
 #undef NTCD_IMPLEMENTATION
+#include <stdio.h>
 
 int main(int argc, char* argv[]){
+    ntcd_cylinder cyl;
+    ntcd_init_cylinder(&cyl, 1.0, 1.0);
+
+    ntcd_transform ta = {
+        {0.0, 0.0, 0.0},
+        {1.0, 0.0, 0.0, 1.0},
+        1.0
+    };
+
+    ntcd_transform tb = {
+        {2.01, 0.0, 0.0},
+        {1.0, 0.0, 0.0, 1.0},
+        1.0
+    };
+
+    int overlap = ntcd_gjk_boolean(&ta, &cyl, &tb, &cyl);
+    printf("%d\n", overlap);
+
     return 0;
 }
 #endif
@@ -35,6 +60,7 @@ int main(int argc, char* argv[]){
 #ifdef NTCD_IMPLEMENTATION
 
 #include <string.h>
+#include <math.h>
 
 #define BARY_GEPP
 
@@ -213,6 +239,13 @@ typedef struct{
     double b_[3 * 4]; //up to 4 points / 3-Simplex
     double max_vert2_;
 }ntcd__simplex;
+
+static inline void ntcd__simplex_init(ntcd__simplex* simplex){
+    simplex->bits_      = 0;
+    simplex->last_sb_   = 0;
+    simplex->size_      = 0;
+    simplex->max_vert2_ = 0.0;
+}
 
 //void ntcd__simplex_print(const ntcd__simplex* simplex){
 //    unsigned char bits = simplex->bits_;
@@ -765,6 +798,7 @@ int ntcd_gjk_boolean(
     double dir[3];
     ntcd__vec3_sub(dir, pb->pos, pa->pos);
     ntcd__simplex simplex;
+    ntcd__simplex_init(&simplex);
 
     unsigned int fail_safe = 0;
 
@@ -806,6 +840,30 @@ int ntcd_gjk_boolean(
     //printf("Encountered error in GJK boolean: Infinite Loop.\n Direction (%f, %f, %f)\n", dir[0], dir[1], dir[2]);
 
     return 1;
+}
+
+//Shape implementations
+static void ntcd__support_cylinder(double* support_point, const void* shape, const double* dir){
+    ntcd_cylinder cyl = *(const ntcd_cylinder*)shape;
+
+    double length = sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
+    if(length != 0.0){
+        double d = cyl.base_radius_ / length;
+        support_point[0] = d * dir[0];
+        support_point[1] = copysign(cyl.half_height_, dir[1]);
+        support_point[2] = d * dir[2];
+    }
+    else{
+        support_point[0] = cyl.base_radius_;
+        support_point[1] = copysign(cyl.half_height_, dir[1]);
+        support_point[2] = 0.0;
+    }
+}
+
+void ntcd_init_cylinder(ntcd_cylinder* cyl, double base_radius, double height){
+    cyl->support = ntcd__support_cylinder;
+    cyl->base_radius_ = base_radius;
+    cyl->half_height_ = 0.5 * height;
 }
 
 #endif //NTCD_IMPLEMENTATION
