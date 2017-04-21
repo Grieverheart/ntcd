@@ -2,9 +2,6 @@
 #ifndef __NTCD_H__
 #define __NTCD_H__
 
-//NOTE: best way to name structs?
-//NOTE: Can I define ntcd_transform in the implementation and still be visible?
-
 //TODO: Make ntcd_transform customizable
 typedef struct{
     double pos[3];
@@ -18,6 +15,9 @@ int ntcd_gjk_boolean(const ntcd_transform*, const void*, const ntcd_transform*, 
 void ntcd_gjk_distance(const ntcd_transform*, const void*, const ntcd_transform*, const void*, double* dist_vec);
 int ntcd_gjk_raycast(const ntcd_transform*, const void*, const ntcd_transform*, const void*, const double* ray_dir, double* distance, double* normal);
 
+//Shapes
+
+//Cylinder
 typedef struct{
     ntcd_support support;
     double base_radius_, half_height_;
@@ -29,26 +29,42 @@ void ntcd_init_cylinder(ntcd_cylinder* cyl, double base_radius, double height);
 #define NTCD_IMPLEMENTATION
 #include "ntcd.h"
 #undef NTCD_IMPLEMENTATION
-#include <stdio.h>
+#include <math.h>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846264338327950288
+#endif
+#include <assert.h>
 
 int main(int argc, char* argv[]){
     ntcd_cylinder cyl;
     ntcd_init_cylinder(&cyl, 1.0, 1.0);
 
+    //Two cylinders of height 1, rotate by 45 degrees around the z-axis,
+    //should overlap at x = 1 / sin(45).
+    
+    double d = 1.0 / sin(M_PI / 4.0);
+
     ntcd_transform ta = {
         {0.0, 0.0, 0.0},
-        {1.0, 0.0, 0.0, 1.0},
+        {0.0, 0.0, sin(M_PI / 8.0), cos(M_PI / 8.0)},
         1.0
     };
 
     ntcd_transform tb = {
-        {2.01, 0.0, 0.0},
-        {1.0, 0.0, 0.0, 1.0},
+        {d - 0.01, 0.0, 0.0},
+        {0.0, 0.0, sin(M_PI / 8.0), cos(M_PI / 8.0)},
         1.0
     };
 
-    int overlap = ntcd_gjk_boolean(&ta, &cyl, &tb, &cyl);
-    printf("%d\n", overlap);
+    ntcd_transform tc = {
+        {d + 0.01, 0.0, 0.0},
+        {0.0, 0.0, sin(M_PI / 8.0), cos(M_PI / 8.0)},
+        1.0
+    };
+
+    int overlap_a = ntcd_gjk_boolean(&ta, &cyl, &tb, &cyl);
+    int overlap_b = ntcd_gjk_boolean(&ta, &cyl, &tc, &cyl);
+    assert(overlap_a != overlap_b);
 
     return 0;
 }
@@ -61,6 +77,7 @@ int main(int argc, char* argv[]){
 
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
 #define BARY_GEPP
 
@@ -139,6 +156,10 @@ static inline void ntcd__quat_vec3_rotate(double* r, const double* q, const doub
     //r[1] = v[1] + 2.0 * (q[2] * (q[1] * v[2] - q[2] * v[1] + q[3] * v[0]) - q[0] * (q[0] * v[1] - q[1] * v[0] + q[3] * v[2]));
     //r[2] = v[2] + 2.0 * (q[0] * (q[2] * v[0] - q[0] * v[2] + q[3] * v[1]) - q[1] * (q[1] * v[2] - q[2] * v[1] + q[3] * v[0]));
 }
+
+//Lookup table for single enabled bit position -- Calculates the log2 of a 4-bit integer.
+static const unsigned char s_pos[] = {0, 0, 1, 0, 2, 0, 0, 0, 3};
+//_______________________________________^__^_____^___________^
 
 //Lookup table which tells us at which positions in the simplex array
 //to get our points a, b, c, d. I.e. if our bits are 0111 -> 7 -> {0, 1, 2}
@@ -257,7 +278,7 @@ static inline void ntcd__simplex_init(ntcd__simplex* simplex){
 static inline void ntcd__simplex_add_point(ntcd__simplex* simplex, const double* point){
     unsigned char b = ~simplex->bits_; //Flip bits
     b &= -b; //Last set (available) bit
-    unsigned char pos = 1 << b; //Get the bit position from the lookup table
+    unsigned char pos = s_pos[b]; //Get the bit position from the lookup table
     simplex->last_sb_ = pos;
     simplex->bits_ |= b; //Insert the new bit
     ++simplex->size_;
