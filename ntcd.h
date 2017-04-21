@@ -39,7 +39,6 @@ int main(int argc, char* argv[]){
 #define BARY_GEPP
 
 //Vectors
-
 static inline double ntcd__vec3_dot(const double* a, const double* b){
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
@@ -91,7 +90,6 @@ static inline int ntcd__vec3_equal(const double* a, const double* b){
 }
 
 // Quaternions
-
 //TODO: Do we really need to calculate the length? Aren't all quaternions assumed of unit length?
 static inline void ntcd__quat_inverse(double* r, const double* q){
     double ilength2 = 1.0  / (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
@@ -102,15 +100,15 @@ static inline void ntcd__quat_inverse(double* r, const double* q){
 static inline void ntcd__quat_vec3_rotate(double* r, const double* q, const double* v){
     double u[3];
     {
-        double a[3], b[3], c[3];
+        double a[3], b[3];
         ntcd__vec3_cross(a, q, v);
-        ntcd__vec3_smul(b, q[3], v);
-        ntcd__vec3_add(c, a, b);
-        ntcd__vec3_cross(u, q, c);
+        ntcd__vec3_fmadd(b, q[3], v, a);
+        ntcd__vec3_cross(u, q, b);
     }
 
-    for(int i = 0; i < 3; ++i) r[i] = v[i] + 2.0 * u[i];
+    ntcd__vec3_fmadd(r, 2.0, u, v);
 
+    //TODO: Check if this is faster
     //r[0] = v[0] + 2.0 * (q[1] * (q[0] * v[1] - q[1] * v[0] + q[3] * v[2]) - q[2] * (q[2] * v[0] - q[0] * v[2] + q[3] * v[1]));
     //r[1] = v[1] + 2.0 * (q[2] * (q[1] * v[2] - q[2] * v[1] + q[3] * v[0]) - q[0] * (q[0] * v[1] - q[1] * v[0] + q[3] * v[2]));
     //r[2] = v[2] + 2.0 * (q[0] * (q[2] * v[0] - q[0] * v[2] + q[3] * v[1]) - q[1] * (q[1] * v[2] - q[2] * v[1] + q[3] * v[0]));
