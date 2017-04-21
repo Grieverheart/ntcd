@@ -77,7 +77,7 @@ int main(int argc, char* argv[]){
 
 #include <string.h>
 #include <math.h>
-#include <stdio.h>
+#include <float.h>
 
 #define BARY_GEPP
 
@@ -861,6 +861,70 @@ int ntcd_gjk_boolean(
     //printf("Encountered error in GJK boolean: Infinite Loop.\n Direction (%f, %f, %f)\n", dir[0], dir[1], dir[2]);
 
     return 1;
+}
+
+void gjk_distance(
+    const ntcd_transform* pa, const void* ca,
+    const ntcd_transform* pb, const void* cb,
+    double* dist
+){
+    double inv_rot_a[4], inv_rot_b[4];
+    ntcd__quat_inverse(inv_rot_a, pa->rot);
+    ntcd__quat_inverse(inv_rot_b, pb->rot);
+
+    double dir[3] = {0.0};
+    ntcd__simplex simplex;
+    ntcd__simplex_init(&simplex);
+
+    unsigned int fail_safe = 0;
+
+    double dist2 = DBL_MAX;
+
+    ntcd_support sa = *(const ntcd_support*)ca;
+    ntcd_support sb = *(const ntcd_support*)cb;
+
+    do{
+        double vertex_a[3];
+        {
+            double inv_dir[3], support_point[3];
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_a, dir);
+            sa(support_point, ca, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_a, pa->rot, support_point);
+            ntcd__vec3_fmadd(vertex_a, pa->size, vertex_a, pa->pos);
+        }
+
+        double vertex_b[3];
+        {
+            double inv_dir[3], support_point[3];
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_b, dir);
+            ntcd__vec3_smul(inv_dir, -1.0, inv_dir);
+            sb(support_point, cb, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_b, pb->rot, support_point);
+            ntcd__vec3_fmadd(vertex_b, pb->size, vertex_b, pb->pos);
+        }
+        double new_point[3];
+        ntcd__vec3_sub(new_point, vertex_a, vertex_b);
+
+        if(ntcd__simplex_contains(&simplex, new_point) || dist2 - ntcd__vec3_dot(dir, new_point) <= dist2 * 1.0e-8){
+            memcpy(dist, dir, 3 * sizeof(*dist));
+            return;
+        }
+        ntcd__simplex_add_point(&simplex, new_point);
+
+        ntcd__simplex_closest(&simplex, dir);
+
+        dist2 = ntcd__vec3_length2(dist);
+
+        if(simplex.size_ == 4 || dist2 < 1.0e-12){
+            memset(dist, 0, 3 * sizeof(*dist));
+            return;
+        }
+
+    }while(++fail_safe < 2000);
+
+    //if(fail_safe == 2000) printf("Encountered error in GJK distance: Infinite Loop.\n Direction (%f, %f, %f)\n", dir[0], dir[1], dir[2]);
+
+    memcpy(dist, dir, 3 * sizeof(*dist));
 }
 
 //Shape implementations
