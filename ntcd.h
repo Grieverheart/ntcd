@@ -75,6 +75,12 @@ static inline void ntcd__vec3_smul(double* c, double f, const double* a){
     c[2] = f * a[2];
 }
 
+static inline void ntcd__vec3_fmadd(double* c, double a, const double* x, const double* y){
+    c[0] = a * x[0] + y[0];
+    c[1] = a * x[1] + y[1];
+    c[2] = a * x[2] + y[2];
+}
+
 static inline double ntcd__vec3_length2(const double* vec){
     return vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2];
 }
@@ -367,7 +373,7 @@ static void ntcd__simplex_closest(ntcd__simplex_t* simplex, double* dir){
         // of two half-space normal to the adjacent faces abc, abd
         if(dot_abPerp1 <= 0.0 && dot_abPerp2 <= 0.0 && dot_aba <= 0.0){
             double f = dot_aba / (dot_aba - dot_abb);
-            for(int i = 0; i < 3; ++i) dir[i] = a[i] + f * ab[i];
+            ntcd__vec3_fmadd(dir, f, ab, a);
             ntcd__simplex_remove_point(simplex, pos[1]);
             ntcd__simplex_remove_point(simplex, pos[2]);
             break;
@@ -381,7 +387,7 @@ static void ntcd__simplex_closest(ntcd__simplex_t* simplex, double* dir){
         // of two half-space normal to the adjacent faces abc, acd
         if(dot_acPerp1 <= 0.0 && dot_acPerp2 <= 0.0 && dot_aca <= 0.0){
             double f = dot_aca / (dot_aca - dot_acc);
-            for(int i = 0; i < 3; ++i) dir[i] = a[i] + f * ac[i];
+            ntcd__vec3_fmadd(dir, f, ac, a);
             ntcd__simplex_remove_point(simplex, pos[0]);
             ntcd__simplex_remove_point(simplex, pos[2]);
             break;
@@ -395,7 +401,7 @@ static void ntcd__simplex_closest(ntcd__simplex_t* simplex, double* dir){
         // of two half-space normal to the adjacent faces acd, abd
         if(dot_adPerp1 <= 0.0 && dot_adPerp2 <= 0.0 && dot_ada <= 0.0){
             double f = dot_ada / (dot_ada - dot_add);
-            for(int i = 0; i < 3; ++i) dir[i] = a[i] + f * ad[i];
+            ntcd__vec3_fmadd(dir, f, ad, a);
             ntcd__simplex_remove_point(simplex, pos[0]);
             ntcd__simplex_remove_point(simplex, pos[1]);
             break;
@@ -497,7 +503,7 @@ static void ntcd__simplex_closest(ntcd__simplex_t* simplex, double* dir){
         double vc = dot_aba * dot_acb - dot_abb * dot_aca;
         if(vc <= 0.0 && dot_aba >= 0.0 && dot_abb <= 0.0){
             double f = dot_aba / (dot_aba - dot_abb);
-            for(int i = 0; i < 3; ++i) dir[i] = a[i] + f * ab[i];
+            ntcd__vec3_fmadd(dir, f, ab, a);
             /* Remove Point c */
             ntcd__simplex_remove_point(simplex, pos[1]);
             break;
@@ -508,8 +514,8 @@ static void ntcd__simplex_closest(ntcd__simplex_t* simplex, double* dir){
         double dot_acc = -ntcd__vec3_dot(ac, c);
         double vb = dot_abc * dot_aca - dot_aba * dot_acc;
         if(vb <= 0.0 && dot_aca >= 0.0 && dot_acc <= 0.0){
-            double w = dot_aca / (dot_aca - dot_acc);
-            for(int i = 0; i < 3; ++i) dir[i] = a[i] + w * ac[i];
+            double f = dot_aca / (dot_aca - dot_acc);
+            ntcd__vec3_fmadd(dir, f, ac, a);
             /* Remove Point b */
             ntcd__simplex_remove_point(simplex, pos[0]);
             break;
@@ -545,7 +551,7 @@ static void ntcd__simplex_closest(ntcd__simplex_t* simplex, double* dir){
             break;
         }
 
-        for(int i = 0; i < 3; ++i) dir[i] = a[i] + ab[i] * (t / denom);
+        ntcd__vec3_fmadd(dir, t / denom, ab, a);
         break;
     }
     case 1:
@@ -745,7 +751,7 @@ static int ntcd__simplex_contains_origin(ntcd__simplex_t* simplex, double* dir){
     case 1:
     {
         const double* a = simplex->p_ + 3 * simplex->last_sb_;
-        for(int i = 0; i < 3; ++i) dir[i] = -a[i];
+        ntcd__vec3_smul(dir, -1.0, a);
         break;
     }
     default: break;
@@ -778,7 +784,7 @@ int ntcd_gjk_boolean(
             ntcd__quat_vec3_rotate(inv_dir, inv_rot_a, dir);
             sa(support, ca, inv_dir);
             ntcd__quat_vec3_rotate(vertex_a, pa->rot, support);
-            for(int i = 0; i < 3; ++i) vertex_a[i] = pa->pos[i] + pa->size * vertex_a[i];
+            ntcd__vec3_fmadd(vertex_a, pa->size, vertex_a, pa->pos);
         }
 
         double vertex_b[3];
@@ -788,7 +794,7 @@ int ntcd_gjk_boolean(
             ntcd__vec3_smul(inv_dir, -1.0, inv_dir);
             sb(support, cb, inv_dir);
             ntcd__quat_vec3_rotate(vertex_b, pb->rot, support);
-            for(int i = 0; i < 3; ++i) vertex_b[i] = pb->pos[i] + pb->size * vertex_b[i];
+            ntcd__vec3_fmadd(vertex_b, pb->size, vertex_b, pb->pos);
         }
 
         double new_point[3];
