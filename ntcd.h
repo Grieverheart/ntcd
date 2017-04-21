@@ -3,20 +3,20 @@
 #define __NTCD_H__
 
 //NOTE: best way to name structs?
-//NOTE: Can I define ntcd_transform_t in the implementation and still be visible?
+//NOTE: Can I define ntcd_transform in the implementation and still be visible?
 
-//TODO: Make ntcd_transform_t customizable
+//TODO: Make ntcd_transform customizable
 typedef struct{
     double pos[3];
     double rot[4];
     double size;
-}ntcd_transform_t;
+}ntcd_transform;
 
-typedef void (*support_t)(double*, const void*, const double*);
+typedef void (*ntcd_support)(double*, const void*, const double*);
 
-int ntcd_gjk_boolean(const ntcd_transform_t*, const void*, const ntcd_transform_t*, const void*);
-void ntcd_gjk_distance(const ntcd_transform_t*, const void*, const ntcd_transform_t*, const void*, double* dist_vec);
-int ntcd_gjk_raycast(const ntcd_transform_t*, const void*, const ntcd_transform_t*, const void*, const double* ray_dir, double* distance, double* normal);
+int ntcd_gjk_boolean(const ntcd_transform*, const void*, const ntcd_transform*, const void*);
+void ntcd_gjk_distance(const ntcd_transform*, const void*, const ntcd_transform*, const void*, double* dist_vec);
+int ntcd_gjk_raycast(const ntcd_transform*, const void*, const ntcd_transform*, const void*, const double* ray_dir, double* distance, double* normal);
 
 //Test
 #if 1
@@ -214,16 +214,16 @@ typedef struct{
     double a_[3 * 4]; //up to 4 points / 3-Simplex
     double b_[3 * 4]; //up to 4 points / 3-Simplex
     double max_vert2_;
-}ntcd__simplex_t;
+}ntcd__simplex;
 
-//void ntcd__simplex_print(const ntcd__simplex_t* simplex){
+//void ntcd__simplex_print(const ntcd__simplex* simplex){
 //    unsigned char bits = simplex->bits_;
 //    for(int i = 0; i < 4; ++i, bits >>= 1){
 //        if(bits & 1) printf("%d: %f, %f, %f\n", i, simplex->p_[3 * i + 0], simplex->p_[3 * i + 1], simplex->p_[3 * i + 2]);
 //    }
 //}
 
-static inline void ntcd__simplex_add_point(ntcd__simplex_t* simplex, const double* point){
+static inline void ntcd__simplex_add_point(ntcd__simplex* simplex, const double* point){
     unsigned char b = ~simplex->bits_; //Flip bits
     b &= -b; //Last set (available) bit
     unsigned char pos = 1 << b; //Get the bit position from the lookup table
@@ -235,18 +235,18 @@ static inline void ntcd__simplex_add_point(ntcd__simplex_t* simplex, const doubl
     if(l2 > simplex->max_vert2_) simplex->max_vert2_ = l2;
 }
 
-static inline void ntcd__simplex_add_point_with_info(ntcd__simplex_t* simplex, const double* point, const double* pa, const double* pb){
+static inline void ntcd__simplex_add_point_with_info(ntcd__simplex* simplex, const double* point, const double* pa, const double* pb){
     ntcd__simplex_add_point(simplex, point);
     memcpy(simplex->a_ + 3 * simplex->last_sb_, pa, 3 * sizeof(*pa));
     memcpy(simplex->b_ + 3 * simplex->last_sb_, pb, 3 * sizeof(*pb));
 }
 
-static inline void ntcd__simplex_remove_point(ntcd__simplex_t* simplex, int p){
+static inline void ntcd__simplex_remove_point(ntcd__simplex* simplex, int p){
     simplex->bits_ ^= (1 << p); //Erase the bit at position p
     --simplex->size_;
 }
 
-static inline int ntcd__simplex_contains(const ntcd__simplex_t* simplex, const double* point){
+static inline int ntcd__simplex_contains(const ntcd__simplex* simplex, const double* point){
     unsigned char bits = simplex->bits_;
     for(int i = 0; i < 4; ++i, bits >>= 1){
         if((bits & 1) && ntcd__vec3_equal(simplex->p_ + 3 * i, point)) return 1;
@@ -254,7 +254,7 @@ static inline int ntcd__simplex_contains(const ntcd__simplex_t* simplex, const d
     return 0;
 }
 
-static inline void ntcd__simplex_translate(ntcd__simplex_t* simplex, const double* dr){
+static inline void ntcd__simplex_translate(ntcd__simplex* simplex, const double* dr){
     //for(int k = 0; k < 4; ++k) p_[k] += dr;
     simplex->max_vert2_ = 0.0;
     unsigned char bits = simplex->bits_;
@@ -266,7 +266,7 @@ static inline void ntcd__simplex_translate(ntcd__simplex_t* simplex, const doubl
     }
 }
 
-static void ntcd__simplex_compute_closest_points(ntcd__simplex_t* simplex, double* pa, double* pb, const double* P){
+static void ntcd__simplex_compute_closest_points(ntcd__simplex* simplex, double* pa, double* pb, const double* P){
     switch(simplex->size_){
     //IMPORTANT: We are having accuracy problems with this projection.
     case 3:{
@@ -329,7 +329,7 @@ static void ntcd__simplex_compute_closest_points(ntcd__simplex_t* simplex, doubl
     }
 }
 
-static void ntcd__simplex_closest(ntcd__simplex_t* simplex, double* dir){
+static void ntcd__simplex_closest(ntcd__simplex* simplex, double* dir){
     ///////////////////////////////////////////////
     //  Check if the origin is contained in the  //
     //  Minkowski sum.                           //
@@ -564,7 +564,7 @@ static void ntcd__simplex_closest(ntcd__simplex_t* simplex, double* dir){
 }
 
 //TODO: dir -> -dir
-static int ntcd__simplex_contains_origin(ntcd__simplex_t* simplex, double* dir){
+static int ntcd__simplex_contains_origin(ntcd__simplex* simplex, double* dir){
     ///////////////////////////////////////////////
     //  Check if the origin is contained in the  //
     //  Minkowski sum.                           //
@@ -761,12 +761,12 @@ static int ntcd__simplex_contains_origin(ntcd__simplex_t* simplex, double* dir){
 }
 
 int ntcd_gjk_boolean(
-    const ntcd_transform_t* pa, const void* ca,
-    const ntcd_transform_t* pb, const void* cb
+    const ntcd_transform* pa, const void* ca,
+    const ntcd_transform* pb, const void* cb
 ){
     double dir[3];
     ntcd__vec3_sub(dir, pb->pos, pa->pos);
-    ntcd__simplex_t simplex;
+    ntcd__simplex simplex;
 
     unsigned int fail_safe = 0;
 
@@ -774,26 +774,26 @@ int ntcd_gjk_boolean(
     ntcd__quat_inverse(inv_rot_a, pa->rot);
     ntcd__quat_inverse(inv_rot_b, pb->rot);
 
-    support_t sa = *(const support_t*)ca;
-    support_t sb = *(const support_t*)cb;
+    ntcd_support sa = *(const ntcd_support*)ca;
+    ntcd_support sb = *(const ntcd_support*)cb;
 
     do{
         double vertex_a[3];
         {
-            double inv_dir[3], support[3];
+            double inv_dir[3], support_point[3];
             ntcd__quat_vec3_rotate(inv_dir, inv_rot_a, dir);
-            sa(support, ca, inv_dir);
-            ntcd__quat_vec3_rotate(vertex_a, pa->rot, support);
+            sa(support_point, ca, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_a, pa->rot, support_point);
             ntcd__vec3_fmadd(vertex_a, pa->size, vertex_a, pa->pos);
         }
 
         double vertex_b[3];
         {
-            double inv_dir[3], support[3];
+            double inv_dir[3], support_point[3];
             ntcd__quat_vec3_rotate(inv_dir, inv_rot_b, dir);
             ntcd__vec3_smul(inv_dir, -1.0, inv_dir);
-            sb(support, cb, inv_dir);
-            ntcd__quat_vec3_rotate(vertex_b, pb->rot, support);
+            sb(support_point, cb, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_b, pb->rot, support_point);
             ntcd__vec3_fmadd(vertex_b, pb->size, vertex_b, pb->pos);
         }
 
