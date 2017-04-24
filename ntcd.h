@@ -43,6 +43,14 @@ typedef struct{
 }ntcd_cone;
 void ntcd_init_cone(ntcd_cone* cone, double base_radius, double height);
 
+//Bicone
+typedef struct{
+    ntcd_support support;
+    double base_radius_, half_height_;
+    double sintheta_;
+}ntcd_bicone;
+void ntcd_init_bicone(ntcd_bicone* bicone, double base_radius, double height);
+
 //Test
 #if 1
 #define NTCD_IMPLEMENTATION
@@ -1170,6 +1178,36 @@ void ntcd_init_cone(ntcd_cone* cone, double base_radius, double height){
     cone->base_radius_ = base_radius;
     cone->half_height_ = 0.5 * height;
     cone->sintheta_ = base_radius / sqrt(base_radius * base_radius + height * height);
+}
+
+//Bicone
+static void ntcd__support_bicone(double* support_point, const void* shape, const double* dir){
+    ntcd_bicone bicone = *(const ntcd_bicone*)shape;
+
+    double test = dir[1] / ntcd__vec3_length(dir);
+    if(test >= bicone.sintheta_){
+        support_point[0] = 0.0;
+        support_point[1] = bicone.half_height_;
+        support_point[2] = 0.0;
+    }
+    else if(test <= -bicone.sintheta_){
+        support_point[0] = 0.0;
+        support_point[1] = -bicone.half_height_;
+        support_point[2] = 0.0;
+    }
+    else{
+        double factor = bicone.base_radius_ / sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
+        support_point[0] = factor * dir[0];
+        support_point[1] = 0.0;
+        support_point[2] = factor * dir[2];
+    }
+}
+
+void ntcd_init_bicone(ntcd_bicone* bicone, double base_radius, double height){
+    bicone->support = ntcd__support_bicone;
+    bicone->base_radius_ = base_radius;
+    bicone->half_height_ = 0.5 * height;
+    bicone->sintheta_ = base_radius / sqrt(base_radius * base_radius + bicone->half_height_ * bicone->half_height_);
 }
 
 #endif //NTCD_IMPLEMENTATION
