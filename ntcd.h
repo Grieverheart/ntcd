@@ -133,6 +133,10 @@ static inline double ntcd__vec3_length2(const double* vec){
     return vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2];
 }
 
+static inline double ntcd__vec3_length(const double* vec){
+    return sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
+}
+
 //TODO: Try memcmp performance
 static inline int ntcd__vec3_equal(const double* a, const double* b){
     return (a[0] == b[0]) && (a[1] == b[1]) && (a[2] == b[2]);
@@ -999,11 +1003,93 @@ void ntcd_gjk_closest_points(
     ntcd__simplex_compute_closest_points(&simplex, point_on_a, point_on_b, dir);
 }
 
+int ntcd_gjk_raycast(
+    double* distance, double* normal,
+    const ntcd_transform* pa, const void* ca,
+    const ntcd_transform* pb, const void* cb,
+    const double* ray_dir
+)
+{
+    static const double etol = 10.0 * DBL_EPSILON;
+
+    double inv_rot_a[4], inv_rot_b[4];
+    ntcd__quat_inverse(inv_rot_a, pa->rot);
+    ntcd__quat_inverse(inv_rot_b, pb->rot);
+
+    double dir[3] = {0.0};
+    ntcd__simplex simplex;
+    ntcd__simplex_init(&simplex);
+
+    unsigned int fail_safe = 0;
+
+    double x[3] = {0.0};
+    double lambda = 0.0;
+
+    double dist2 = DBL_MAX;
+
+    ntcd_support sa = *(const ntcd_support*)ca;
+    ntcd_support sb = *(const ntcd_support*)cb;
+
+    do{
+        double vertex_a[3];
+        {
+            double inv_dir[3], support_point[3];
+            ntcd__vec3_smul(inv_dir, -1.0, dir);
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_a, inv_dir);
+            sa(support_point, ca, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_a, pa->rot, support_point);
+            ntcd__vec3_fmadd(vertex_a, pa->size, vertex_a, pa->pos);
+        }
+
+        double vertex_b[3];
+        {
+            double inv_dir[3], support_point[3];
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_b, dir);
+            sb(support_point, cb, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_b, pb->rot, support_point);
+            ntcd__vec3_fmadd(vertex_b, pb->size, vertex_b, pb->pos);
+        }
+        double new_point[3];
+        ntcd__vec3_sub(new_point, vertex_a, vertex_b);
+
+        double new_point_trans[3];
+        ntcd__vec3_sub(new_point_trans, new_point, x);
+
+        if(ntcd__vec3_dot(dir, new_point_trans) > 0.0){
+            if(ntcd__vec3_dot(dir, ray_dir) >= 0.0) return 0;
+
+            double delta = ntcd__vec3_dot(dir, new_point_trans) / ntcd__vec3_dot(dir, ray_dir);
+            lambda -= delta;
+            if(lambda > *distance) return 0;
+            ntcd__vec3_smul(x, -lambda, ray_dir);
+            //if(x.length2() > 100.0) return false;
+            ntcd__vec3_smul(normal, -1.0 / ntcd__vec3_length(dir), dir);
+            double dr[3];
+            ntcd__vec3_smul(dr, -delta, ray_dir);
+            ntcd__simplex_translate(&simplex, dr);
+        }
+
+        ntcd__simplex_add_point(&simplex, new_point_trans);
+        ntcd__simplex_closest(&simplex, dir);
+
+        dist2 = ntcd__vec3_length2(dir);
+
+        if(simplex.size_ == 4 || dist2 < etol * simplex.max_vert2_){
+            *distance = lambda;
+            return 1;
+        }
+    }while(fail_safe++ < 1000);
+    *distance = lambda;
+    //printf("Encountered error in GJK raycast: Infinite Loop.\n Direction (%f, %f, %f)\n", dir[0], dir[1], dir[2]);
+    return 0;
+}
+
 //Shape implementations
 static void ntcd__support_cylinder(double* support_point, const void* shape, const double* dir){
     ntcd_cylinder cyl = *(const ntcd_cylinder*)shape;
 
     double length = sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
+    //TODO: Make length > small_number
     if(length != 0.0){
         double d = cyl.base_radius_ / length;
         support_point[0] = d * dir[0];
