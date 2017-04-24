@@ -20,26 +20,39 @@ void ntcd_gjk_closest_points(double* point_on_a, double* point_on_b, const ntcd_
 int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, const void*, const ntcd_transform*, const void*, const double* ray_dir);
 
 //Shapes
+//NOTE: The long axis of a shape is defined to be along the y axis.
+//TODO: Test all shapes
 
 //Sphere
 typedef struct{
     ntcd_support support;
 }ntcd_sphere;
-void ntcd_init_sphere(ntcd_sphere* sph);
+void ntcd_sphere_initialize(ntcd_sphere* sph);
+
+//Mesh
+typedef struct{
+    ntcd_support support;
+    unsigned int n_vertices_;
+    double* vertices_;
+    unsigned int* n_vert_neighbours_;
+    unsigned int** vert_neighbours_;
+}ntcd_mesh;
+void ntcd_mesh_initialize(ntcd_mesh* mesh, const unsigned int n_vertices, const double* vertices, const unsigned int n_faces, const unsigned int* face_start, const unsigned int* faces);
+void ntcd_mesh_terminate(ntcd_mesh* mesh);
 
 //Cylinder
 typedef struct{
     ntcd_support support;
     double base_radius_, half_height_;
 }ntcd_cylinder;
-void ntcd_init_cylinder(ntcd_cylinder* cyl, double base_radius, double height);
+void ntcd_cylinder_initialize(ntcd_cylinder* cyl, double base_radius, double height);
 
 //Box
 typedef struct{
     ntcd_support support;
     double extent_[3];
 }ntcd_box;
-void ntcd_init_box(ntcd_box* box, const double* extent);
+void ntcd_box_initialize(ntcd_box* box, const double* extent);
 
 //Cone
 typedef struct{
@@ -47,7 +60,7 @@ typedef struct{
     double base_radius_, half_height_;
     double sintheta_;
 }ntcd_cone;
-void ntcd_init_cone(ntcd_cone* cone, double base_radius, double height);
+void ntcd_cone_initialize(ntcd_cone* cone, double base_radius, double height);
 
 //Bicone
 typedef struct{
@@ -55,7 +68,7 @@ typedef struct{
     double base_radius_, half_height_;
     double sintheta_;
 }ntcd_bicone;
-void ntcd_init_bicone(ntcd_bicone* bicone, double base_radius, double height);
+void ntcd_bicone_initialize(ntcd_bicone* bicone, double base_radius, double height);
 
 //Leaf Cylinder
 typedef struct{
@@ -63,7 +76,7 @@ typedef struct{
     double half_width_, half_length_, half_height_;
     double circle_radius_, circle_distance_;
 }ntcd_leaf_cylinder;
-void ntcd_init_leaf_cylinder(ntcd_leaf_cylinder* leaf, double width, double length, double height);
+void ntcd_leaf_cylinder_initialize(ntcd_leaf_cylinder* leaf, double width, double length, double height);
 
 //Test
 #if 1
@@ -78,11 +91,11 @@ void ntcd_init_leaf_cylinder(ntcd_leaf_cylinder* leaf, double width, double leng
 
 int main(int argc, char* argv[]){
     ntcd_cylinder cyl;
-    ntcd_init_cylinder(&cyl, 1.0, 1.0);
+    ntcd_cylinder_initialize(&cyl, 1.0, 1.0);
 
     //Two cylinders of height 1, rotate by 45 degrees around the z-axis,
     //should overlap at x = 1 / sin(45).
-    
+
     double d = 1.0 / sin(M_PI / 4.0);
 
     ntcd_transform ta = {
@@ -124,6 +137,7 @@ int main(int argc, char* argv[]){
 #include <string.h>
 #include <math.h>
 #include <float.h>
+#include <stdlib.h>
 
 #define BARY_GEPP
 
@@ -311,7 +325,7 @@ typedef struct{
     double max_vert2_;
 }ntcd__simplex;
 
-static inline void ntcd__simplex_init(ntcd__simplex* simplex){
+static inline void ntcd__simplex_initialize(ntcd__simplex* simplex){
     simplex->bits_      = 0;
     simplex->last_sb_   = 0;
     simplex->size_      = 0;
@@ -869,7 +883,7 @@ int ntcd_gjk_boolean(
     double dir[3];
     ntcd__vec3_sub(dir, pb->pos, pa->pos);
     ntcd__simplex simplex;
-    ntcd__simplex_init(&simplex);
+    ntcd__simplex_initialize(&simplex);
 
     unsigned int fail_safe = 0;
 
@@ -924,7 +938,7 @@ void ntcd_gjk_distance(
 
     double dir[3] = {0.0};
     ntcd__simplex simplex;
-    ntcd__simplex_init(&simplex);
+    ntcd__simplex_initialize(&simplex);
 
     unsigned int fail_safe = 0;
 
@@ -988,7 +1002,7 @@ void ntcd_gjk_closest_points(
 
     double dir[3] = {0.0};
     ntcd__simplex simplex;
-    ntcd__simplex_init(&simplex);
+    ntcd__simplex_initialize(&simplex);
 
     unsigned int fail_safe = 0;
 
@@ -1058,7 +1072,7 @@ int ntcd_gjk_raycast(
 
     double dir[3] = {0.0};
     ntcd__simplex simplex;
-    ntcd__simplex_init(&simplex);
+    ntcd__simplex_initialize(&simplex);
 
     unsigned int fail_safe = 0;
 
@@ -1145,8 +1159,8 @@ static void ntcd__support_cylinder(double* support_point, const void* shape, con
     }
 }
 
-void ntcd_init_cylinder(ntcd_cylinder* cyl, double base_radius, double height){
-    cyl->support = ntcd__support_cylinder;
+void ntcd_cylinder_initialize(ntcd_cylinder* cyl, double base_radius, double height){
+    cyl->support      = ntcd__support_cylinder;
     cyl->base_radius_ = base_radius;
     cyl->half_height_ = 0.5 * height;
 }
@@ -1159,7 +1173,7 @@ static void ntcd__support_box(double* support_point, const void* shape, const do
     support_point[2] = copysign(extent[2], dir[2]);
 }
 
-void ntcd_init_box(ntcd_box* box, const double* extent){
+void ntcd_box_initialize(ntcd_box* box, const double* extent){
     box->support = ntcd__support_box;
     memcpy(box->extent_, extent, 3 * sizeof(*extent));
 }
@@ -1187,11 +1201,11 @@ static void ntcd__support_cone(double* support_point, const void* shape, const d
     }
 }
 
-void ntcd_init_cone(ntcd_cone* cone, double base_radius, double height){
-    cone->support = ntcd__support_cone;
+void ntcd_cone_initialize(ntcd_cone* cone, double base_radius, double height){
+    cone->support      = ntcd__support_cone;
     cone->base_radius_ = base_radius;
     cone->half_height_ = 0.5 * height;
-    cone->sintheta_ = base_radius / sqrt(base_radius * base_radius + height * height);
+    cone->sintheta_    = base_radius / sqrt(base_radius * base_radius + height * height);
 }
 
 //Bicone
@@ -1217,11 +1231,11 @@ static void ntcd__support_bicone(double* support_point, const void* shape, const
     }
 }
 
-void ntcd_init_bicone(ntcd_bicone* bicone, double base_radius, double height){
-    bicone->support = ntcd__support_bicone;
+void ntcd_bicone_initialize(ntcd_bicone* bicone, double base_radius, double height){
+    bicone->support      = ntcd__support_bicone;
     bicone->base_radius_ = base_radius;
     bicone->half_height_ = 0.5 * height;
-    bicone->sintheta_ = base_radius / sqrt(base_radius * base_radius + bicone->half_height_ * bicone->half_height_);
+    bicone->sintheta_    = base_radius / sqrt(base_radius * base_radius + bicone->half_height_ * bicone->half_height_);
 }
 
 //Leaf Cylinder
@@ -1245,7 +1259,7 @@ static void ntcd__support_leaf_cylinder(double* support_point, const void* shape
     support_point[2] = z;
 }
 
-void ntcd_init_leaf_cylinder(ntcd_leaf_cylinder* leaf, double width, double length, double height){
+void ntcd_leaf_cylinder_initialize(ntcd_leaf_cylinder* leaf, double width, double length, double height){
     leaf->support          = ntcd__support_leaf_cylinder;
     leaf->half_width_      = 0.5 * width;
     leaf->half_length_     = 0.5 * length;
@@ -1269,8 +1283,131 @@ static void ntcd__support_sphere(double* support_point, const void* shape, const
     }
 }
 
-void ntcd_init_sphere(ntcd_sphere* sph){
-    sph->support= ntcd__support_sphere;
+void ntcd_sphere_initialize(ntcd_sphere* sph){
+    sph->support = ntcd__support_sphere;
+}
+
+//Mesh
+
+//TODO: Perhaps choose one of the two code paths depending on the number of vertices.
+static void ntcd__support_mesh(double* support_point, const void* shape, const double* dir){
+    ntcd_mesh mesh = *(const ntcd_mesh*)shape;
+    //unsigned int curr = 0;
+    //double p = 0.0;
+    //double max = ntcd__vec3_dot(mesh.vertices_, dir);
+    //for(unsigned int i = 1; i < mesh.n_vertices_; ++i){
+    //    p = ntcd__vec3_dot(mesh.vertices_ + 3 * i, dir);
+    //    if(p > max){
+    //        curr = i;
+    //        max = p;
+    //    }
+    //}
+    //memcpy(support_point, mesh.vertices_ + 3 * curr, 3 * sizeof(support_point));
+    unsigned int next = 0, last = 0, curr = 0;
+    double p = 0.0;
+    double max = ntcd__vec3_dot(mesh.vertices_, dir);
+    for(;;){
+        for(unsigned int vid = 0; vid < mesh.n_vert_neighbours_[curr]; ++vid){
+            next = mesh.vert_neighbours_[curr][vid];
+            if(next != last){
+                p = ntcd__vec3_dot(mesh.vertices_ + 3 * next, dir);
+                if(p > max){
+                    max = p;
+                    last = curr;
+                    curr = next;
+                    break;
+                }
+            }
+            if(vid == mesh.n_vert_neighbours_[curr] - 1){
+                memcpy(support_point, mesh.vertices_ + 3 * curr, 3 * sizeof(*support_point));
+                return;
+            }
+        }
+    }
+}
+
+void ntcd_mesh_initialize(ntcd_mesh* mesh, const unsigned int n_vertices, const double* vertices, const unsigned int n_faces, const unsigned int* face_start, const unsigned int* faces){
+    mesh->support     = ntcd__support_mesh;
+    mesh->n_vertices_ = n_vertices;
+    mesh->vertices_   = malloc(3 * n_vertices * sizeof(*vertices));
+    memcpy(mesh->vertices_, vertices, 3 * n_vertices * sizeof(*vertices));
+
+    /* Find Edges */
+    unsigned int n_edges = n_vertices + n_faces - 2; //Euler's formula.
+    unsigned int* edges = malloc(n_edges * 2 * sizeof(*edges)); //Each edge is represented by its two vertex indices.
+    //Iterate over each face and for each next face in the list, check if they
+    //share two vertices, this defines an edge.
+    for(unsigned int fi = 0, eid = 0; fi < n_faces; ++fi, ++eid){
+        const unsigned int* face = faces + face_start[fi];
+        unsigned int face_size = ((fi < n_faces - 1)? face_start[fi + 1]: n_vertices) - face_start[fi];
+        double normal[3];
+        {
+            double ab[3], ac[3];
+            ntcd__vec3_sub(ab, vertices + 3 * face[1], vertices + 3 * face[0]);
+            ntcd__vec3_sub(ac, vertices + 3 * face[face_size - 1], vertices + 3 * face[0]);
+            ntcd__vec3_cross(normal, ab, ac);
+        }
+        ntcd__vec3_smul(normal, ntcd__vec3_length(normal), normal);
+
+        for(unsigned int fj = fi + 1; fj < n_faces; ++fj){
+            unsigned int fcount = 0;
+            unsigned int edge[3] = {0};
+            for(unsigned int i = 0; i < face_size; ++i){
+                unsigned int vid_fi = face[i];
+                for(unsigned int j = 0; j < face_size; ++j){
+                    if(vid_fi == face[j]){
+                        edge[fcount] = vid_fi;
+                        ++fcount;
+                    }
+                }
+                if(fcount == 2){
+                    //edges.push_back(edge);
+                    memcpy(edges + 2 * eid, edge, 2 * sizeof(*edge));
+                    ++eid;
+                    fcount = 0;
+                    memset(edge, 0, 3 * sizeof(*edge));
+                }
+            }
+        }
+    }
+
+    /* Find Vertex Neighbours */
+    //For all vertices, check if two edges share this vertex. If they do and it
+    //isn't vertex 0, append the other vertices of these edge to the neighbor list
+    mesh->vert_neighbours_    = malloc(n_vertices * sizeof(*mesh->vert_neighbours_));
+    mesh->n_vert_neighbours_ = calloc(n_vertices, sizeof(*mesh->n_vert_neighbours_));
+    for(unsigned int vid = 0; vid < n_vertices; ++vid){
+        unsigned int capacity = 5;
+        unsigned int n_neighbours = 0;
+        mesh->vert_neighbours_[vid] = malloc(capacity * sizeof(**mesh->vert_neighbours_));
+        unsigned int* neighbours = mesh->vert_neighbours_[vid];
+        for(unsigned int ei = 0; ei < n_edges; ++ei){
+            for(unsigned int i = 0; i < 2; ++i){
+                if(edges[2 * ei + i] == vid && edges[2 * ei + (i + 1) % 2] != 0){
+                    neighbours[n_neighbours++] = edges[2 * ei + (i + 1) % 2];
+                    if(n_neighbours == capacity){
+                        capacity *= 2;
+                        unsigned int* temp = realloc(mesh->vert_neighbours_[vid], capacity * sizeof(**mesh->vert_neighbours_));
+                        //assert(temp != NULL);
+                        mesh->vert_neighbours_[vid] = temp;
+                        neighbours = temp;
+                    }
+                }
+            }
+        }
+        if(n_neighbours) mesh->n_vert_neighbours_[vid] = n_neighbours;
+    }
+
+    free(edges);
+}
+
+void ntcd_mesh_terminate(ntcd_mesh* mesh){
+    free(mesh->vertices_);
+    free(mesh->n_vert_neighbours_);
+    for(unsigned int vid = 0; vid < mesh->n_vertices_; ++vid){
+        free(mesh->vert_neighbours_[vid]);
+    }
+    free(mesh->vert_neighbours_);
 }
 
 #endif //NTCD_IMPLEMENTATION
