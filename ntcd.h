@@ -28,6 +28,13 @@ typedef struct{
 }ntcd_cylinder;
 void ntcd_init_cylinder(ntcd_cylinder* cyl, double base_radius, double height);
 
+//Box
+typedef struct{
+    ntcd_support support;
+    double extent_[3];
+}ntcd_box;
+void ntcd_init_box(ntcd_box* box, const double* extent);
+
 //Test
 #if 1
 #define NTCD_IMPLEMENTATION
@@ -1088,6 +1095,8 @@ int ntcd_gjk_raycast(
 }
 
 //Shape implementations
+
+//Cylinder
 static void ntcd__support_cylinder(double* support_point, const void* shape, const double* dir){
     ntcd_cylinder cyl = *(const ntcd_cylinder*)shape;
 
@@ -1110,6 +1119,19 @@ void ntcd_init_cylinder(ntcd_cylinder* cyl, double base_radius, double height){
     cyl->support = ntcd__support_cylinder;
     cyl->base_radius_ = base_radius;
     cyl->half_height_ = 0.5 * height;
+}
+
+//Box
+static void ntcd__support_box(double* support_point, const void* shape, const double* dir){
+    const double* extent = ((const ntcd_box*)shape)->extent_;
+    support_point[0] = copysign(extent[0], dir[0]);
+    support_point[1] = copysign(extent[1], dir[1]);
+    support_point[2] = copysign(extent[2], dir[2]);
+}
+
+void ntcd_init_box(ntcd_box* box, const double* extent){
+    box->support = ntcd__support_box;
+    memcpy(box->extent_, extent, 3 * sizeof(*extent));
 }
 
 #endif //NTCD_IMPLEMENTATION
