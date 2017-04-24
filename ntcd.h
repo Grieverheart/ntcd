@@ -2,7 +2,10 @@
 #ifndef __NTCD_H__
 #define __NTCD_H__
 
-//TODO: Make ntcd_transform customizable
+//TODO: Define tolerances as macros.
+//TODO: Implement more shapes.
+
+//TODO: Make ntcd_transform customizable.
 typedef struct{
     double pos[3];
     double rot[4];
@@ -1089,7 +1092,7 @@ static void ntcd__support_cylinder(double* support_point, const void* shape, con
     ntcd_cylinder cyl = *(const ntcd_cylinder*)shape;
 
     double length = sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
-    //TODO: Make length > small_number
+    //TODO: Make length > small_number?
     if(length != 0.0){
         double d = cyl.base_radius_ / length;
         support_point[0] = d * dir[0];
