@@ -21,6 +21,12 @@ int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, co
 
 //Shapes
 
+//Sphere
+typedef struct{
+    ntcd_support support;
+}ntcd_sphere;
+void ntcd_init_sphere(ntcd_sphere* sph);
+
 //Cylinder
 typedef struct{
     ntcd_support support;
@@ -1246,6 +1252,25 @@ void ntcd_init_leaf_cylinder(ntcd_leaf_cylinder* leaf, double width, double leng
     leaf->half_height_     = 0.5 * height;
     leaf->circle_radius_   = 0.25 * (length * length + width * width) / width;
     leaf->circle_distance_ = 0.25 * (length * length - width * width) / width;
+}
+
+//Sphere
+static void ntcd__support_sphere(double* support_point, const void* shape, const double* dir){
+    double norm = 1.0 / ntcd__vec3_length(dir);
+    if(norm > 0.0){
+        support_point[0] = dir[0] / norm;
+        support_point[1] = dir[1] / norm;
+        support_point[2] = dir[2] / norm;
+    }
+    else{
+        support_point[0] = 1.0;
+        support_point[1] = 0.0;
+        support_point[2] = 0.0;
+    }
+}
+
+void ntcd_init_sphere(ntcd_sphere* sph){
+    sph->support= ntcd__support_sphere;
 }
 
 #endif //NTCD_IMPLEMENTATION
