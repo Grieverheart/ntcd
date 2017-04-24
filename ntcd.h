@@ -12,8 +12,9 @@ typedef struct{
 typedef void (*ntcd_support)(double*, const void*, const double*);
 
 int ntcd_gjk_boolean(const ntcd_transform*, const void*, const ntcd_transform*, const void*);
-void ntcd_gjk_distance(const ntcd_transform*, const void*, const ntcd_transform*, const void*, double* dist_vec);
-int ntcd_gjk_raycast(const ntcd_transform*, const void*, const ntcd_transform*, const void*, const double* ray_dir, double* distance, double* normal);
+void ntcd_gjk_distance(double* dist_vec, const ntcd_transform*, const void*, const ntcd_transform*, const void*);
+void ntcd_gjk_closest_points(double* point_on_a, double* point_on_b, const ntcd_transform*, const void*, const ntcd_transform*, const void*);
+int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, const void*, const ntcd_transform*, const void*, const double* ray_dir);
 
 //Shapes
 
@@ -65,6 +66,11 @@ int main(int argc, char* argv[]){
     int overlap_a = ntcd_gjk_boolean(&ta, &cyl, &tb, &cyl);
     int overlap_b = ntcd_gjk_boolean(&ta, &cyl, &tc, &cyl);
     assert(overlap_a != overlap_b);
+    double dist[3];
+    ntcd_gjk_distance(dist, &ta, &cyl, &tc, &cyl);
+    double length = sqrt(dist[0] * dist[0] + dist[1] * dist[1] + dist[2] * dist[2]);
+    assert(length < 0.01);
+    assert(length > 0.0);
 
     return 0;
 }
@@ -178,7 +184,7 @@ static inline double triangle_area_2D(double x1, double y1, double x2, double y2
 
 //Algorithm for calculating barycentric coordinates from
 //'Real-time collision detection' by Christer Ericson.
-static inline Vec3d barycentric_coordinates(double* R, const double* P, const double* A, const double* B, const double* C){
+static inline void barycentric_coordinates(double* R, const double* P, const double* A, const double* B, const double* C){
     double u, v, w;
 
     double m[3];
@@ -843,8 +849,8 @@ int ntcd_gjk_boolean(
         double vertex_b[3];
         {
             double inv_dir[3], support_point[3];
-            ntcd__quat_vec3_rotate(inv_dir, inv_rot_b, dir);
-            ntcd__vec3_smul(inv_dir, -1.0, inv_dir);
+            ntcd__vec3_smul(inv_dir, -1.0, dir);
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_b, inv_dir);
             sb(support_point, cb, inv_dir);
             ntcd__quat_vec3_rotate(vertex_b, pb->rot, support_point);
             ntcd__vec3_fmadd(vertex_b, pb->size, vertex_b, pb->pos);
@@ -856,17 +862,17 @@ int ntcd_gjk_boolean(
         if(dn < 0.0 || ntcd__simplex_contains(&simplex, new_point)) return 0;
         ntcd__simplex_add_point(&simplex, new_point);
         if(ntcd__simplex_contains_origin(&simplex, dir) || ntcd__vec3_length2(dir) == 0.0) return 1;
-    }while(fail_safe++ < 100);
+    }while(fail_safe++ < 2000);
 
     //printf("Encountered error in GJK boolean: Infinite Loop.\n Direction (%f, %f, %f)\n", dir[0], dir[1], dir[2]);
 
     return 1;
 }
 
-void gjk_distance(
+void ntcd_gjk_distance(
+    double* dist,
     const ntcd_transform* pa, const void* ca,
-    const ntcd_transform* pb, const void* cb,
-    double* dist
+    const ntcd_transform* pb, const void* cb
 ){
     double inv_rot_a[4], inv_rot_b[4];
     ntcd__quat_inverse(inv_rot_a, pa->rot);
@@ -887,7 +893,8 @@ void gjk_distance(
         double vertex_a[3];
         {
             double inv_dir[3], support_point[3];
-            ntcd__quat_vec3_rotate(inv_dir, inv_rot_a, dir);
+            ntcd__vec3_smul(inv_dir, -1.0, dir);
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_a, inv_dir);
             sa(support_point, ca, inv_dir);
             ntcd__quat_vec3_rotate(vertex_a, pa->rot, support_point);
             ntcd__vec3_fmadd(vertex_a, pa->size, vertex_a, pa->pos);
@@ -897,7 +904,6 @@ void gjk_distance(
         {
             double inv_dir[3], support_point[3];
             ntcd__quat_vec3_rotate(inv_dir, inv_rot_b, dir);
-            ntcd__vec3_smul(inv_dir, -1.0, inv_dir);
             sb(support_point, cb, inv_dir);
             ntcd__quat_vec3_rotate(vertex_b, pb->rot, support_point);
             ntcd__vec3_fmadd(vertex_b, pb->size, vertex_b, pb->pos);
@@ -913,18 +919,84 @@ void gjk_distance(
 
         ntcd__simplex_closest(&simplex, dir);
 
-        dist2 = ntcd__vec3_length2(dist);
+        dist2 = ntcd__vec3_length2(dir);
 
         if(simplex.size_ == 4 || dist2 < 1.0e-12){
             memset(dist, 0, 3 * sizeof(*dist));
             return;
         }
 
-    }while(++fail_safe < 2000);
+    }while(++fail_safe < 200);
 
     //if(fail_safe == 2000) printf("Encountered error in GJK distance: Infinite Loop.\n Direction (%f, %f, %f)\n", dir[0], dir[1], dir[2]);
 
     memcpy(dist, dir, 3 * sizeof(*dist));
+}
+
+void ntcd_gjk_closest_points(
+    double* point_on_a, double* point_on_b,
+    const ntcd_transform* pa, const void* ca,
+    const ntcd_transform* pb, const void* cb
+){
+    double inv_rot_a[4], inv_rot_b[4];
+    ntcd__quat_inverse(inv_rot_a, pa->rot);
+    ntcd__quat_inverse(inv_rot_b, pb->rot);
+
+    double dir[3] = {0.0};
+    ntcd__simplex simplex;
+    ntcd__simplex_init(&simplex);
+
+    unsigned int fail_safe = 0;
+
+    double dist2 = DBL_MAX;
+
+    ntcd_support sa = *(const ntcd_support*)ca;
+    ntcd_support sb = *(const ntcd_support*)cb;
+
+    do{
+        double vertex_a[3];
+        {
+            double inv_dir[3], support_point[3];
+            ntcd__vec3_smul(inv_dir, -1.0, dir);
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_a, inv_dir);
+            sa(support_point, ca, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_a, pa->rot, support_point);
+            ntcd__vec3_fmadd(vertex_a, pa->size, vertex_a, pa->pos);
+        }
+
+        double vertex_b[3];
+        {
+            double inv_dir[3], support_point[3];
+            ntcd__quat_vec3_rotate(inv_dir, inv_rot_b, dir);
+            sb(support_point, cb, inv_dir);
+            ntcd__quat_vec3_rotate(vertex_b, pb->rot, support_point);
+            ntcd__vec3_fmadd(vertex_b, pb->size, vertex_b, pb->pos);
+        }
+        double new_point[3];
+        ntcd__vec3_sub(new_point, vertex_a, vertex_b);
+
+        if(ntcd__simplex_contains(&simplex, new_point) || dist2 - ntcd__vec3_dot(dir, new_point) <= dist2 * 1.0e-8){
+            ntcd__simplex_compute_closest_points(&simplex, point_on_a, point_on_b, dir);
+            return;
+        }
+
+        ntcd__simplex_add_point_with_info(&simplex, new_point, vertex_a, vertex_b);
+
+        ntcd__simplex_closest(&simplex, dir);
+
+        dist2 = ntcd__vec3_length2(dir);
+
+        if(simplex.size_ == 4 || dist2 < 1.0e-12){
+            memset(point_on_a, 0, 3 * sizeof(*point_on_a));
+            memset(point_on_b, 0, 3 * sizeof(*point_on_b));
+            return;
+        }
+
+    }while(++fail_safe < 2000);
+
+    //if(fail_safe == 2000) printf("Encountered error in GJK closest points: Infinite Loop.\n Direction (%f, %f, %f)\n", dir[0], dir[1], dir[2]);
+
+    ntcd__simplex_compute_closest_points(&simplex, point_on_a, point_on_b, dir);
 }
 
 //Shape implementations
