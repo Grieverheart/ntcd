@@ -35,6 +35,14 @@ typedef struct{
 }ntcd_box;
 void ntcd_init_box(ntcd_box* box, const double* extent);
 
+//Cone
+typedef struct{
+    ntcd_support support;
+    double base_radius_, half_height_;
+    double sintheta_;
+}ntcd_cone;
+void ntcd_init_cone(ntcd_cone* cone, double base_radius, double height);
+
 //Test
 #if 1
 #define NTCD_IMPLEMENTATION
@@ -1132,6 +1140,36 @@ static void ntcd__support_box(double* support_point, const void* shape, const do
 void ntcd_init_box(ntcd_box* box, const double* extent){
     box->support = ntcd__support_box;
     memcpy(box->extent_, extent, 3 * sizeof(*extent));
+}
+
+//Cone
+static void ntcd__support_cone(double* support_point, const void* shape, const double* dir){
+    ntcd_cone cone = *(const ntcd_cone*)shape;
+
+    double test = dir[1] / ntcd__vec3_length(dir);
+    if(test >= cone.sintheta_){
+        support_point[0] = 0.0;
+        support_point[1] = cone.half_height_;
+        support_point[2] = 0.0;
+    }
+    else if(test < cone.sintheta_ && (dir[0] != 0.0 || dir[2] != 0.0)){
+        double length = sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
+        support_point[0] = cone.base_radius_ * dir[0] / length;
+        support_point[1] = -cone.half_height_;
+        support_point[2] = cone.base_radius_ * dir[2] / length;
+    }
+    else{
+        support_point[0] = 0.0;
+        support_point[1] = -cone.half_height_;
+        support_point[2] = 0.0;
+    }
+}
+
+void ntcd_init_cone(ntcd_cone* cone, double base_radius, double height){
+    cone->support = ntcd__support_cone;
+    cone->base_radius_ = base_radius;
+    cone->half_height_ = 0.5 * height;
+    cone->sintheta_ = base_radius / sqrt(base_radius * base_radius + height * height);
 }
 
 #endif //NTCD_IMPLEMENTATION
