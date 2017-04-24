@@ -51,6 +51,14 @@ typedef struct{
 }ntcd_bicone;
 void ntcd_init_bicone(ntcd_bicone* bicone, double base_radius, double height);
 
+//Leaf Cylinder
+typedef struct{
+    ntcd_support support;
+    double half_width_, half_length_, half_height_;
+    double circle_radius_, circle_distance_;
+}ntcd_leaf_cylinder;
+void ntcd_init_leaf_cylinder(ntcd_leaf_cylinder* leaf, double width, double length, double height);
+
 //Test
 #if 1
 #define NTCD_IMPLEMENTATION
@@ -1208,6 +1216,36 @@ void ntcd_init_bicone(ntcd_bicone* bicone, double base_radius, double height){
     bicone->base_radius_ = base_radius;
     bicone->half_height_ = 0.5 * height;
     bicone->sintheta_ = base_radius / sqrt(base_radius * base_radius + bicone->half_height_ * bicone->half_height_);
+}
+
+//Leaf Cylinder
+static void ntcd__support_leaf_cylinder(double* support_point, const void* shape, const double* dir){
+    ntcd_leaf_cylinder leaf = *(const ntcd_leaf_cylinder*)shape;
+
+    double x = 0.0, z = 0.0;
+    if(dir[0] != 0.0 || dir[2] != 0.0){
+        double l = sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
+        double test = dir[2] / l;
+        if(test >= leaf.half_length_ / leaf.circle_radius_) z = leaf.half_length_;
+        else if(test <= -leaf.half_length_ / leaf.circle_radius_) z = -leaf.half_length_;
+        else{
+            x = leaf.circle_radius_ * dir[0] / l - copysign(leaf.circle_distance_, dir[0]);
+            z = leaf.circle_radius_ * dir[2] / l;
+        }
+    }
+
+    support_point[0] = x;
+    support_point[1] = copysign(leaf.half_height_, dir[1]);
+    support_point[2] = z;
+}
+
+void ntcd_init_leaf_cylinder(ntcd_leaf_cylinder* leaf, double width, double length, double height){
+    leaf->support          = ntcd__support_leaf_cylinder;
+    leaf->half_width_      = 0.5 * width;
+    leaf->half_length_     = 0.5 * length;
+    leaf->half_height_     = 0.5 * height;
+    leaf->circle_radius_   = 0.25 * (length * length + width * width) / width;
+    leaf->circle_distance_ = 0.25 * (length * length - width * width) / width;
 }
 
 #endif //NTCD_IMPLEMENTATION
