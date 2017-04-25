@@ -5,6 +5,10 @@
 //TODO: Define tolerances as macros.
 //TODO: Implement more shapes.
 
+#ifdef __cplusplus
+extern "C"{
+#endif
+
 //TODO: Make ntcd_transform customizable.
 typedef struct{
     double pos[3];
@@ -77,6 +81,10 @@ typedef struct{
     double circle_radius_, circle_distance_;
 }ntcd_leaf_cylinder;
 void ntcd_leaf_cylinder_initialize(ntcd_leaf_cylinder* leaf, double width, double length, double height);
+
+#ifdef __cplusplus
+}
+#endif
 
 //Test
 #if 1
@@ -200,8 +208,10 @@ static inline int ntcd__vec3_equal(const double* a, const double* b){
 //TODO: Do we really need to calculate the length? Aren't all quaternions assumed of unit length?
 static inline void ntcd__quat_inverse(double* r, const double* q){
     double ilength2 = 1.0  / (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
-    for(int i = 0; i < 3; ++i) r[i] = -q[i] * ilength2;
-    r[3] = q[3] * ilength2;
+    r[0] = -q[0] * ilength2;
+    r[1] = -q[1] * ilength2;
+    r[2] = -q[2] * ilength2;
+    r[3] =  q[3] * ilength2;
 }
 
 static inline void ntcd__quat_vec3_rotate(double* r, const double* q, const double* v){
@@ -333,6 +343,7 @@ static inline void ntcd__simplex_initialize(ntcd__simplex* simplex){
 }
 
 //void ntcd__simplex_print(const ntcd__simplex* simplex){
+//    printf("yo\n");
 //    unsigned char bits = simplex->bits_;
 //    for(int i = 0; i < 4; ++i, bits >>= 1){
 //        if(bits & 1) printf("%d: %f, %f, %f\n", i, simplex->p_[3 * i + 0], simplex->p_[3 * i + 1], simplex->p_[3 * i + 2]);
@@ -533,9 +544,7 @@ static void ntcd__simplex_closest(ntcd__simplex* simplex, double* dir){
             if(ntcd__vec3_dot(ad, abxac) * ntcd__vec3_dot(a, abxac) > 0.0 && dot_abPerp1 >= 0.0 && dot_acPerp2 >= 0.0){
                 /* Remove point d */
                 ntcd__simplex_remove_point(simplex, pos[2]);
-                double f = ntcd__vec3_dot(dir, a) / ntcd__vec3_length2(dir);
-                if(ntcd__vec3_dot(ad, abxac) > 0.0) ntcd__vec3_smul(dir, -f, abxac);
-                else ntcd__vec3_smul(dir, f, abxac);
+                ntcd__vec3_smul(dir, ntcd__vec3_dot(abxac, a) / ntcd__vec3_length2(abxac), abxac);
                 break;
             }
         }
@@ -548,9 +557,7 @@ static void ntcd__simplex_closest(ntcd__simplex* simplex, double* dir){
             if(ntcd__vec3_dot(ac, abxad) * ntcd__vec3_dot(a, abxad) > 0.0 && dot_abPerp2 >= 0.0 && dot_adPerp1 >= 0.0){
                 /* Remove point c */
                 ntcd__simplex_remove_point(simplex, pos[1]);
-                double f = ntcd__vec3_dot(dir, a) / ntcd__vec3_length2(dir);
-                if(ntcd__vec3_dot(ac, abxad) > 0.0) ntcd__vec3_smul(dir, -f, abxad);
-                else ntcd__vec3_smul(dir, f, abxad);
+                ntcd__vec3_smul(dir, ntcd__vec3_dot(abxad, a) / ntcd__vec3_length2(abxad), abxad);
                 break;
             }
         }
@@ -563,9 +570,7 @@ static void ntcd__simplex_closest(ntcd__simplex* simplex, double* dir){
             if(ntcd__vec3_dot(ab, acxad) * ntcd__vec3_dot(a, acxad) > 0.0 && dot_acPerp1 >= 0.0 && dot_adPerp2 >= 0.0){
                 /* Remove point b */
                 ntcd__simplex_remove_point(simplex, pos[0]);
-                double f = ntcd__vec3_dot(dir, a) / ntcd__vec3_length2(dir);
-                if(ntcd__vec3_dot(ab, acxad) > 0.0) ntcd__vec3_smul(dir, -f, acxad);
-                else ntcd__vec3_smul(dir, f, acxad);
+                ntcd__vec3_smul(dir, ntcd__vec3_dot(acxad, a) / ntcd__vec3_length2(acxad), acxad);
                 break;
             }
         }
@@ -581,9 +586,7 @@ static void ntcd__simplex_closest(ntcd__simplex* simplex, double* dir){
                 /* Remove point a */
                 ntcd__simplex_remove_point(simplex, simplex->last_sb_);
                 simplex->last_sb_ = pos[0];
-                double f = ntcd__vec3_dot(dir, b) / ntcd__vec3_length2(dir);
-                if(ntcd__vec3_dot(ab, bcxbd) < 0.0) ntcd__vec3_smul(dir, -f, bcxbd);
-                else ntcd__vec3_smul(dir, f, bcxbd);
+                ntcd__vec3_smul(dir, ntcd__vec3_dot(bcxbd, b) / ntcd__vec3_length2(bcxbd), bcxbd);
                 break;
             }
         }
@@ -650,7 +653,7 @@ static void ntcd__simplex_closest(ntcd__simplex* simplex, double* dir){
         const double* b = simplex->p_ + 3 * pos[0];
 
         double  ab[3];
-        ntcd__vec3_add(ab, b, a);
+        ntcd__vec3_sub(ab, b, a);
 
         double t = -ntcd__vec3_dot(ab, a);
         if(t <= 0.0){
@@ -1070,7 +1073,8 @@ int ntcd_gjk_raycast(
     ntcd__quat_inverse(inv_rot_a, pa->rot);
     ntcd__quat_inverse(inv_rot_b, pb->rot);
 
-    double dir[3] = {0.0};
+    double dir[3];
+    ntcd__vec3_sub(dir, pb->pos, pa->pos);
     ntcd__simplex simplex;
     ntcd__simplex_initialize(&simplex);
 
@@ -1116,7 +1120,7 @@ int ntcd_gjk_raycast(
             lambda -= delta;
             if(lambda > *distance) return 0;
             ntcd__vec3_smul(x, -lambda, ray_dir);
-            //if(x.length2() > 100.0) return false;
+            if(ntcd__vec3_length2(x) > 100.0) return 0;
             ntcd__vec3_smul(normal, -1.0 / ntcd__vec3_length(dir), dir);
             double dr[3];
             ntcd__vec3_smul(dr, -delta, ray_dir);
@@ -1270,7 +1274,7 @@ void ntcd_leaf_cylinder_initialize(ntcd_leaf_cylinder* leaf, double width, doubl
 
 //Sphere
 static void ntcd__support_sphere(double* support_point, const void* shape, const double* dir){
-    double norm = 1.0 / ntcd__vec3_length(dir);
+    double norm = ntcd__vec3_length(dir);
     if(norm > 0.0){
         support_point[0] = dir[0] / norm;
         support_point[1] = dir[1] / norm;
@@ -1329,15 +1333,15 @@ static void ntcd__support_mesh(double* support_point, const void* shape, const d
 void ntcd_mesh_initialize(ntcd_mesh* mesh, const unsigned int n_vertices, const double* vertices, const unsigned int n_faces, const unsigned int* face_start, const unsigned int* faces){
     mesh->support     = ntcd__support_mesh;
     mesh->n_vertices_ = n_vertices;
-    mesh->vertices_   = malloc(3 * n_vertices * sizeof(*vertices));
+    mesh->vertices_   = (double*)malloc(3 * n_vertices * sizeof(*vertices));
     memcpy(mesh->vertices_, vertices, 3 * n_vertices * sizeof(*vertices));
 
     /* Find Edges */
     unsigned int n_edges = n_vertices + n_faces - 2; //Euler's formula.
-    unsigned int* edges = malloc(n_edges * 2 * sizeof(*edges)); //Each edge is represented by its two vertex indices.
+    unsigned int* edges = (unsigned int*)malloc(n_edges * 2 * sizeof(*edges)); //Each edge is represented by its two vertex indices.
     //Iterate over each face and for each next face in the list, check if they
     //share two vertices, this defines an edge.
-    for(unsigned int fi = 0, eid = 0; fi < n_faces; ++fi, ++eid){
+    for(unsigned int fi = 0, eid = 0; fi < n_faces; ++fi){
         const unsigned int* face = faces + face_start[fi];
         unsigned int face_size = ((fi < n_faces - 1)? face_start[fi + 1]: n_vertices) - face_start[fi];
         double normal[3];
@@ -1351,21 +1355,18 @@ void ntcd_mesh_initialize(ntcd_mesh* mesh, const unsigned int n_vertices, const 
 
         for(unsigned int fj = fi + 1; fj < n_faces; ++fj){
             unsigned int fcount = 0;
-            unsigned int edge[3] = {0};
+            unsigned int edge[3];
             for(unsigned int i = 0; i < face_size; ++i){
                 unsigned int vid_fi = face[i];
                 for(unsigned int j = 0; j < face_size; ++j){
-                    if(vid_fi == face[j]){
-                        edge[fcount] = vid_fi;
-                        ++fcount;
+                    if(vid_fi == faces[face_start[fj] + j]){
+                        edge[fcount++] = vid_fi;
                     }
                 }
                 if(fcount == 2){
-                    //edges.push_back(edge);
                     memcpy(edges + 2 * eid, edge, 2 * sizeof(*edge));
                     ++eid;
                     fcount = 0;
-                    memset(edge, 0, 3 * sizeof(*edge));
                 }
             }
         }
@@ -1374,12 +1375,12 @@ void ntcd_mesh_initialize(ntcd_mesh* mesh, const unsigned int n_vertices, const 
     /* Find Vertex Neighbours */
     //For all vertices, check if two edges share this vertex. If they do and it
     //isn't vertex 0, append the other vertices of these edge to the neighbor list
-    mesh->vert_neighbours_    = malloc(n_vertices * sizeof(*mesh->vert_neighbours_));
-    mesh->n_vert_neighbours_ = calloc(n_vertices, sizeof(*mesh->n_vert_neighbours_));
+    mesh->vert_neighbours_   = (unsigned int**)malloc(n_vertices * sizeof(*mesh->vert_neighbours_));
+    mesh->n_vert_neighbours_ = (unsigned int*)calloc(n_vertices, sizeof(*mesh->n_vert_neighbours_));
     for(unsigned int vid = 0; vid < n_vertices; ++vid){
         unsigned int capacity = 5;
         unsigned int n_neighbours = 0;
-        mesh->vert_neighbours_[vid] = malloc(capacity * sizeof(**mesh->vert_neighbours_));
+        mesh->vert_neighbours_[vid] = (unsigned int *)malloc(capacity * sizeof(**mesh->vert_neighbours_));
         unsigned int* neighbours = mesh->vert_neighbours_[vid];
         for(unsigned int ei = 0; ei < n_edges; ++ei){
             for(unsigned int i = 0; i < 2; ++i){
@@ -1387,7 +1388,7 @@ void ntcd_mesh_initialize(ntcd_mesh* mesh, const unsigned int n_vertices, const 
                     neighbours[n_neighbours++] = edges[2 * ei + (i + 1) % 2];
                     if(n_neighbours == capacity){
                         capacity *= 2;
-                        unsigned int* temp = realloc(mesh->vert_neighbours_[vid], capacity * sizeof(**mesh->vert_neighbours_));
+                        unsigned int* temp = (unsigned int*)realloc(mesh->vert_neighbours_[vid], capacity * sizeof(**mesh->vert_neighbours_));
                         //assert(temp != NULL);
                         mesh->vert_neighbours_[vid] = temp;
                         neighbours = temp;
