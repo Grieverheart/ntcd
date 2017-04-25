@@ -27,11 +27,21 @@ int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, co
 //NOTE: The long axis of a shape is defined to be along the y axis.
 //TODO: Test all shapes
 
+//Current supported shapes:
+//Sphere, Point, Mesh, Cylinder, Box,
+//Cone, Bicone, Leaf Cylinder
+
 //Sphere
 typedef struct{
     ntcd_support support;
 }ntcd_sphere;
 void ntcd_sphere_initialize(ntcd_sphere* sph);
+
+//Point
+typedef struct{
+    ntcd_support support;
+}ntcd_point;
+void ntcd_point_initialize(ntcd_point* point);
 
 //Mesh
 typedef struct{
@@ -1289,6 +1299,15 @@ static void ntcd__support_sphere(double* support_point, const void* shape, const
 
 void ntcd_sphere_initialize(ntcd_sphere* sph){
     sph->support = ntcd__support_sphere;
+}
+
+//Point
+static void ntcd__support_point(double* support_point, const void* shape, const double* dir){
+    memset(support_point, 0, 3 * sizeof(*dir));
+}
+
+void ntcd_point_initialize(ntcd_point* point){
+    point->support = ntcd__support_point;
 }
 
 //Mesh
