@@ -4,6 +4,7 @@
 
 //TODO: Define tolerances as macros.
 //TODO: Implement more shapes.
+//TODO: Investigate raycast false positives on y-axis.
 
 #ifdef __cplusplus
 extern "C"{
@@ -42,6 +43,12 @@ typedef struct{
     ntcd_support support;
 }ntcd_point;
 void ntcd_point_initialize(ntcd_point* point);
+
+//Disk
+typedef struct{
+    ntcd_support support;
+}ntcd_disk;
+void ntcd_disk_initialize(ntcd_disk* disk);
 
 //Mesh
 typedef struct{
@@ -1070,6 +1077,7 @@ void ntcd_gjk_closest_points(
     ntcd__simplex_compute_closest_points(&simplex, point_on_a, point_on_b, dir);
 }
 
+//TODO: Do we need some way to check if a specific point has been already added to the simplex.
 int ntcd_gjk_raycast(
     double* distance, double* normal,
     const ntcd_transform* pa, const void* ca,
@@ -1308,6 +1316,26 @@ static void ntcd__support_point(double* support_point, const void* shape, const 
 
 void ntcd_point_initialize(ntcd_point* point){
     point->support = ntcd__support_point;
+}
+
+//Disk
+static void ntcd__support_disk(double* support_point, const void* shape, const double* dir){
+    double length2 = dir[0] * dir[0] + dir[2] * dir[2];
+    if(length2 != 0.0){
+        double length = 1.0 / sqrt(length2);
+        support_point[0] = dir[0] * length;
+        support_point[1] = 0.0;
+        support_point[2] = dir[2] * length;
+    }
+    else{
+        support_point[0] = 1.0;
+        support_point[1] = 0.0;
+        support_point[2] = 0.0;
+    }
+}
+
+void ntcd_disk_initialize(ntcd_disk* disk){
+    disk->support = ntcd__support_disk;
 }
 
 //Mesh
