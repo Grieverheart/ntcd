@@ -3,7 +3,6 @@
 #define __NTCD_H__
 
 //TODO: Define tolerances as macros.
-//TODO: Implement Sphere-swept shape.
 //TODO: Investigate raycast false positives on y-axis.
 
 #ifdef __cplusplus
@@ -29,8 +28,8 @@ int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, co
 //TODO: Test all shapes
 
 //Current supported shapes:
-//Sphere, Point, Mesh, Cylinder, Box, Cone,
-//Bicone, Leaf Cylinder, Hull, Minkowski
+//Sphere, Point, Mesh, Cylinder, Box, Cone, Bicone,
+//Leaf Cylinder, Sphere-swept, Hull, Minkowski
 
 //Sphere
 typedef struct{
@@ -98,6 +97,13 @@ typedef struct{
     double circle_radius_, circle_distance_;
 }ntcd_leaf_cylinder;
 void ntcd_leaf_cylinder_initialize(ntcd_leaf_cylinder* leaf, double width, double length, double height);
+
+//Sphere-swept
+typedef struct{
+    ntcd_support support;
+    const void* shape_;
+}ntcd_sphere_swept;
+void ntcd_sphere_swept_initialize(ntcd_sphere_swept* msum, const void* shape);
 
 //Hull
 typedef struct{
@@ -1480,6 +1486,22 @@ void ntcd_mesh_terminate(ntcd_mesh* mesh){
         free(mesh->vert_neighbours_[vid]);
     }
     free(mesh->vert_neighbours_);
+}
+
+//Sphere-swept
+static void ntcd__support_sphere_swept(double* support_point, const void* shape, const double* dir){
+    ntcd_sphere_swept swept = *(const ntcd_sphere_swept*)shape;
+    ntcd_support support = *(const ntcd_support*)swept.shape_;
+
+    double sphere_point[3];
+    ntcd__support_sphere(sphere_point, NULL, dir);
+    support(support_point, swept.shape_, dir);
+    ntcd__vec3_add(support_point, support_point, sphere_point);
+}
+
+void ntcd_sphere_swept_initialize(ntcd_sphere_swept* swept, const void* shape){
+    swept->support = ntcd__support_sphere_swept;
+    swept->shape_  = shape;
 }
 
 //Hull
