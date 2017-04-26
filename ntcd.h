@@ -3,7 +3,7 @@
 #define __NTCD_H__
 
 //TODO: Define tolerances as macros.
-//TODO: Implement more shapes.
+//TODO: Implement Sphere-swept shape.
 //TODO: Investigate raycast false positives on y-axis.
 
 #ifdef __cplusplus
@@ -29,8 +29,8 @@ int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, co
 //TODO: Test all shapes
 
 //Current supported shapes:
-//Sphere, Point, Mesh, Cylinder, Box,
-//Cone, Bicone, Leaf Cylinder, Hull
+//Sphere, Point, Mesh, Cylinder, Box, Cone,
+//Bicone, Leaf Cylinder, Hull, Minkowski
 
 //Sphere
 typedef struct{
@@ -111,6 +111,17 @@ typedef struct{
     double inv_rot_b_[4];
 }ntcd_hull;
 void ntcd_hull_initialize(ntcd_hull* hull, const ntcd_transform* ta, const void* ca, const ntcd_transform* tb, const void* cb);
+
+//Minkowski
+typedef struct{
+    ntcd_support support;
+    const void* ca_;
+    const void* cb_;
+    ntcd_transform t_;
+    //Cache inverse rotation.
+    double inv_rot_[4];
+}ntcd_minkowski_sum;
+void ntcd_minkowski_sum_initialize(ntcd_minkowski_sum* msum, const ntcd_transform* t, const void* ca, const void* cb);
 
 #ifdef __cplusplus
 }
@@ -1503,6 +1514,32 @@ void ntcd_hull_initialize(ntcd_hull* hull, const ntcd_transform* ta, const void*
 
     ntcd__quat_inverse(hull->inv_rot_a_, hull->ta_.rot);
     ntcd__quat_inverse(hull->inv_rot_b_, hull->tb_.rot);
+}
+
+//Minkowski
+static void ntcd__support_minkowski_sum(double* support_point, const void* shape, const double* dir){
+    ntcd_minkowski_sum msum = *(const ntcd_minkowski_sum*)shape;
+    ntcd_support sa = *(const ntcd_support*)msum.ca_;
+    ntcd_support sb = *(const ntcd_support*)msum.cb_;
+
+    sb(support_point, msum.cb_, dir);
+
+    double inv_dir[3], support_point_b[3];
+    ntcd__quat_vec3_rotate(inv_dir, msum.inv_rot_, dir);
+    sa(support_point_b, msum.ca_, inv_dir);
+    ntcd__quat_vec3_rotate(support_point_b, msum.t_.rot, support_point_b);
+    ntcd__vec3_fmadd(support_point_b, msum.t_.size, support_point_b, msum.t_.pos);
+
+    ntcd__vec3_add(support_point, support_point, support_point_b);
+}
+
+void ntcd_minkowski_sum_initialize(ntcd_minkowski_sum* msum, const ntcd_transform* t, const void* ca, const void* cb){
+    msum->support = ntcd__support_minkowski_sum;
+    msum->ca_     = ca;
+    msum->cb_     = cb;
+    msum->t_      = *t;
+
+    ntcd__quat_inverse(msum->inv_rot_, msum->t_.rot);
 }
 
 #endif //NTCD_IMPLEMENTATION
