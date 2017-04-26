@@ -30,7 +30,7 @@ int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, co
 
 //Current supported shapes:
 //Sphere, Point, Mesh, Cylinder, Box,
-//Cone, Bicone, Leaf Cylinder
+//Cone, Bicone, Leaf Cylinder, Hull
 
 //Sphere
 typedef struct{
@@ -99,12 +99,20 @@ typedef struct{
 }ntcd_leaf_cylinder;
 void ntcd_leaf_cylinder_initialize(ntcd_leaf_cylinder* leaf, double width, double length, double height);
 
+//Hull
+typedef struct{
+    ntcd_support support;
+    const void* ca_;
+    const void* cb_;
+}ntcd_hull;
+void ntcd_hull_initialize(ntcd_hull* hull, const void* ca, const void* cb);
+
 #ifdef __cplusplus
 }
 #endif
 
 //Test
-#if 1
+#if 0
 #define NTCD_IMPLEMENTATION
 #include "ntcd.h"
 #undef NTCD_IMPLEMENTATION
@@ -1456,6 +1464,23 @@ void ntcd_mesh_terminate(ntcd_mesh* mesh){
         free(mesh->vert_neighbours_[vid]);
     }
     free(mesh->vert_neighbours_);
+}
+
+//Hull
+static void ntcd__support_hull(double* support_point, const void* shape, const double* dir){
+    ntcd_hull hull = *(const ntcd_hull*)shape;
+    ntcd_support sa = *(const ntcd_support*)hull.ca_;
+    ntcd_support sb = *(const ntcd_support*)hull.cb_;
+    double a[3], b[3];
+    sa(a, hull.ca_, dir);
+    sb(b, hull.cb_, dir);
+    ntcd__vec3_add(support_point, a, b);
+}
+
+void ntcd_hull_initialize(ntcd_hull* hull, const void* ca, const void* cb){
+    hull->support = ntcd__support_hull;
+    hull->ca_ = ca;
+    hull->cb_ = cb;
 }
 
 #endif //NTCD_IMPLEMENTATION
