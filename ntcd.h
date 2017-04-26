@@ -104,8 +104,13 @@ typedef struct{
     ntcd_support support;
     const void* ca_;
     const void* cb_;
+    ntcd_transform ta_;
+    ntcd_transform tb_;
+    //Cache inverse rotations.
+    double inv_rot_a_[4];
+    double inv_rot_b_[4];
 }ntcd_hull;
-void ntcd_hull_initialize(ntcd_hull* hull, const void* ca, const void* cb);
+void ntcd_hull_initialize(ntcd_hull* hull, const ntcd_transform* ta, const void* ca, const ntcd_transform* tb, const void* cb);
 
 #ifdef __cplusplus
 }
@@ -1471,16 +1476,33 @@ static void ntcd__support_hull(double* support_point, const void* shape, const d
     ntcd_hull hull = *(const ntcd_hull*)shape;
     ntcd_support sa = *(const ntcd_support*)hull.ca_;
     ntcd_support sb = *(const ntcd_support*)hull.cb_;
-    double a[3], b[3];
-    sa(a, hull.ca_, dir);
-    sb(b, hull.cb_, dir);
-    ntcd__vec3_add(support_point, a, b);
+
+    double inv_dir_a[3];
+    ntcd__quat_vec3_rotate(inv_dir_a, hull.inv_rot_a_, dir);
+    sa(support_point, hull.ca_, inv_dir_a);
+    ntcd__quat_vec3_rotate(support_point, hull.ta_.rot, support_point);
+    ntcd__vec3_fmadd(support_point, hull.ta_.size, support_point, hull.ta_.pos);
+
+    double inv_dir_b[3], temp_point[3];
+    ntcd__quat_vec3_rotate(inv_dir_b, hull.inv_rot_b_, dir);
+    sb(temp_point, hull.cb_, inv_dir_b);
+    ntcd__quat_vec3_rotate(temp_point, hull.tb_.rot, temp_point);
+    ntcd__vec3_fmadd(temp_point, hull.tb_.size, temp_point, hull.tb_.pos);
+
+    if(ntcd__vec3_dot(temp_point, dir) > ntcd__vec3_dot(support_point, dir)){
+        memcpy(support_point, temp_point, 3 * sizeof(*support_point));
+    }
 }
 
-void ntcd_hull_initialize(ntcd_hull* hull, const void* ca, const void* cb){
+void ntcd_hull_initialize(ntcd_hull* hull, const ntcd_transform* ta, const void* ca, const ntcd_transform* tb, const void* cb){
     hull->support = ntcd__support_hull;
-    hull->ca_ = ca;
-    hull->cb_ = cb;
+    hull->ca_     = ca;
+    hull->cb_     = cb;
+    hull->ta_     = *ta;
+    hull->tb_     = *tb;
+
+    ntcd__quat_inverse(hull->inv_rot_a_, hull->ta_.rot);
+    ntcd__quat_inverse(hull->inv_rot_b_, hull->tb_.rot);
 }
 
 #endif //NTCD_IMPLEMENTATION
