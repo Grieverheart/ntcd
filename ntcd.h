@@ -25,10 +25,9 @@ int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, co
 
 //Shapes
 //NOTE: The long axis of a shape is defined to be along the y axis.
-//TODO: Test all shapes
 
 //Current supported shapes:
-//Sphere, Point, Mesh, Cylinder, Box, Cone, Bicone,
+//Sphere, Point, Line, Mesh, Cylinder, Box, Cone, Bicone,
 //Leaf Cylinder, Sphere-swept, Hull, Minkowski
 
 //Sphere
@@ -42,6 +41,12 @@ typedef struct{
     ntcd_support support;
 }ntcd_point;
 void ntcd_point_initialize(ntcd_point* point);
+
+//Line
+typedef struct{
+    ntcd_support support;
+}ntcd_line;
+void ntcd_line_initialize(ntcd_line* line);
 
 //Disk
 typedef struct{
@@ -503,11 +508,8 @@ static void ntcd__simplex_compute_closest_points(ntcd__simplex* simplex, double*
     }
 }
 
+//Reduce the simple to its feature closest to the origin and update the search direction, dir.
 static void ntcd__simplex_closest(ntcd__simplex* simplex, double* dir){
-    ///////////////////////////////////////////////
-    //  Check if the origin is contained in the  //
-    //  Minkowski sum.                           //
-    ///////////////////////////////////////////////
     switch(simplex->size_){
     case 4:
     {
@@ -730,10 +732,8 @@ static void ntcd__simplex_closest(ntcd__simplex* simplex, double* dir){
 }
 
 //TODO: dir -> -dir
+//Check if the origin is contained in the simplex and update the search direction, dir.
 static int ntcd__simplex_contains_origin(ntcd__simplex* simplex, double* dir){
-    ///////////////////////////////////////////////
-    //  Check if the origin is contained in the  //
-    //  Minkowski sum.                           //
     ///////////////////////////////////////////////
     switch(simplex->size_){
     case 4:
@@ -1348,6 +1348,17 @@ void ntcd_point_initialize(ntcd_point* point){
     point->support = ntcd__support_point;
 }
 
+//Line
+static void ntcd__support_line(double* support_point, const void* shape, const double* dir){
+    support_point[0] = 0.0;
+    support_point[1] = copysign(1.0, dir[1]);
+    support_point[2] = 0.0;
+}
+
+void ntcd_line_initialize(ntcd_line* line){
+    line->support = ntcd__support_line;
+}
+
 //Disk
 static void ntcd__support_disk(double* support_point, const void* shape, const double* dir){
     double length2 = dir[0] * dir[0] + dir[2] * dir[2];
@@ -1544,11 +1555,11 @@ static void ntcd__support_minkowski_sum(double* support_point, const void* shape
     ntcd_support sa = *(const ntcd_support*)msum.ca_;
     ntcd_support sb = *(const ntcd_support*)msum.cb_;
 
-    sb(support_point, msum.cb_, dir);
+    sa(support_point, msum.ca_, dir);
 
     double inv_dir[3], support_point_b[3];
     ntcd__quat_vec3_rotate(inv_dir, msum.inv_rot_, dir);
-    sa(support_point_b, msum.ca_, inv_dir);
+    sb(support_point_b, msum.cb_, inv_dir);
     ntcd__quat_vec3_rotate(support_point_b, msum.t_.rot, support_point_b);
     ntcd__vec3_fmadd(support_point_b, msum.t_.size, support_point_b, msum.t_.pos);
 
