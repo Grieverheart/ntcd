@@ -1,9 +1,25 @@
+#ifdef NTCD_IMPLEMENTATION
+#ifndef NTCD_GJK_ERROR_TOLERANCE 
+#include <float.h>
+#define NTCD_GJK_ERROR_TOLERANCE 10.0 * DBL_EPSILON
+#endif //NTCD_GJK_ERROR_TOLERANCE 
+#ifndef NTCD_GJK_RELATIVE_ERROR 
+#define NTCD_GJK_RELATIVE_ERROR 1.0e-4
+#define NTCD_GJK_RELATIVE_ERROR2 NTCD_GJK_RELATIVE_ERROR * NTCD_GJK_RELATIVE_ERROR
+#endif //NTCD_GJK_RELATIVE_ERROR 
+#endif //NTCD_IMPLEMENTATION
+
 //Interface
 #ifndef __NTCD_H__
 #define __NTCD_H__
 
-//TODO: Define tolerances as macros.
 //TODO: Investigate raycast false positives on y-axis.
+
+#ifdef NTCD_STATIC
+#define NTCD_DEF static
+#else
+#define NTCD_DEF extern
+#endif
 
 #ifdef __cplusplus
 extern "C"{
@@ -18,10 +34,10 @@ typedef struct{
 
 typedef void (*ntcd_support)(double*, const void*, const double*);
 
-int ntcd_gjk_boolean(const ntcd_transform*, const void*, const ntcd_transform*, const void*);
-void ntcd_gjk_distance(double* dist_vec, const ntcd_transform*, const void*, const ntcd_transform*, const void*);
-void ntcd_gjk_closest_points(double* point_on_a, double* point_on_b, const ntcd_transform*, const void*, const ntcd_transform*, const void*);
-int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, const void*, const ntcd_transform*, const void*, const double* ray_dir);
+NTCD_DEF int ntcd_gjk_boolean(const ntcd_transform*, const void*, const ntcd_transform*, const void*);
+NTCD_DEF void ntcd_gjk_distance(double* dist_vec, const ntcd_transform*, const void*, const ntcd_transform*, const void*);
+NTCD_DEF void ntcd_gjk_closest_points(double* point_on_a, double* point_on_b, const ntcd_transform*, const void*, const ntcd_transform*, const void*);
+NTCD_DEF int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, const void*, const ntcd_transform*, const void*, const double* ray_dir);
 
 //Shapes
 //NOTE: The long axis of a shape is defined to be along the y axis.
@@ -196,69 +212,68 @@ int main(int argc, char* argv[]){
 
 #include <string.h>
 #include <math.h>
-#include <float.h>
 #include <stdlib.h>
 
 #define BARY_GEPP
 
 //Vectors
-static inline double ntcd__vec3_dot(const double* a, const double* b){
+static double ntcd__vec3_dot(const double* a, const double* b){
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
-static inline void ntcd__vec3_cross(double* c, const double* a, const double* b){
+static void ntcd__vec3_cross(double* c, const double* a, const double* b){
     c[0] = a[1] * b[2] - a[2] * b[1];
     c[1] = a[2] * b[0] - a[0] * b[2];
     c[2] = a[0] * b[1] - a[1] * b[0];
 }
 
 //Calculates d = (a x b) x c
-static inline void ntcd__vec3_triple_product(double* d, const double* a, const double* b, const double* c){
+static void ntcd__vec3_triple_product(double* d, const double* a, const double* b, const double* c){
     d[0] = b[0] * ntcd__vec3_dot(a, c) - a[0] * ntcd__vec3_dot(b, c);
     d[1] = b[1] * ntcd__vec3_dot(a, c) - a[1] * ntcd__vec3_dot(b, c);
     d[2] = b[2] * ntcd__vec3_dot(a, c) - a[2] * ntcd__vec3_dot(b, c);
 }
 
-static inline void ntcd__vec3_add(double*c, const double* a, const double* b){
+static void ntcd__vec3_add(double*c, const double* a, const double* b){
     c[0] = a[0] + b[0];
     c[1] = a[1] + b[1];
     c[2] = a[2] + b[2];
 }
 
-static inline void ntcd__vec3_sub(double* c, const double* a, const double* b){
+static void ntcd__vec3_sub(double* c, const double* a, const double* b){
     c[0] = a[0] - b[0];
     c[1] = a[1] - b[1];
     c[2] = a[2] - b[2];
 }
 
-static inline void ntcd__vec3_smul(double* c, double f, const double* a){
+static void ntcd__vec3_smul(double* c, double f, const double* a){
     c[0] = f * a[0];
     c[1] = f * a[1];
     c[2] = f * a[2];
 }
 
-static inline void ntcd__vec3_fmadd(double* c, double a, const double* x, const double* y){
+static void ntcd__vec3_fmadd(double* c, double a, const double* x, const double* y){
     c[0] = a * x[0] + y[0];
     c[1] = a * x[1] + y[1];
     c[2] = a * x[2] + y[2];
 }
 
-static inline double ntcd__vec3_length2(const double* vec){
+static double ntcd__vec3_length2(const double* vec){
     return vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2];
 }
 
-static inline double ntcd__vec3_length(const double* vec){
+static double ntcd__vec3_length(const double* vec){
     return sqrt(vec[0] * vec[0] + vec[1] * vec[1] + vec[2] * vec[2]);
 }
 
 //TODO: Try memcmp performance
-static inline int ntcd__vec3_equal(const double* a, const double* b){
+static int ntcd__vec3_equal(const double* a, const double* b){
     return (a[0] == b[0]) && (a[1] == b[1]) && (a[2] == b[2]);
 }
 
 // Quaternions
 //TODO: Do we really need to calculate the length? Aren't all quaternions assumed of unit length?
-static inline void ntcd__quat_inverse(double* r, const double* q){
+static void ntcd__quat_inverse(double* r, const double* q){
     double ilength2 = 1.0  / (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
     r[0] = -q[0] * ilength2;
     r[1] = -q[1] * ilength2;
@@ -266,7 +281,7 @@ static inline void ntcd__quat_inverse(double* r, const double* q){
     r[3] =  q[3] * ilength2;
 }
 
-static inline void ntcd__quat_vec3_rotate(double* r, const double* q, const double* v){
+static void ntcd__quat_vec3_rotate(double* r, const double* q, const double* v){
     double u[3];
     {
         double a[3], b[3];
@@ -298,13 +313,13 @@ static const unsigned char p_pos[16][3] =
 };
 
 #if defined(BARY_ERICSON)
-static inline double triangle_area_2D(double x1, double y1, double x2, double y2, double x3, double y3){
+static double triangle_area_2D(double x1, double y1, double x2, double y2, double x3, double y3){
     return (x1 - x2) * (y2 - y3) - (x2 - x3) * (y1 - y2);
 }
 
 //Algorithm for calculating barycentric coordinates from
 //'Real-time collision detection' by Christer Ericson.
-static inline void barycentric_coordinates(double* R, const double* P, const double* A, const double* B, const double* C){
+static void barycentric_coordinates(double* R, const double* P, const double* A, const double* B, const double* C){
     double u, v, w;
 
     double m[3];
@@ -340,7 +355,7 @@ static inline void barycentric_coordinates(double* R, const double* P, const dou
 }
 
 #elif defined(BARY_CRAMER)
-static inline void barycentric_coordinates(double* R, const double* P, const double* A, const double* B, const double* C){
+static void barycentric_coordinates(double* R, const double* P, const double* A, const double* B, const double* C){
     double v0[3], v1[3], v2[3];
     ntcd__vec3_sub(v0, B, A);
     ntcd__vec3_sub(v1, C, A);
@@ -358,7 +373,7 @@ static inline void barycentric_coordinates(double* R, const double* P, const dou
     R[2] = 1.0 - R[0] - R[1];
 }
 #elif defined(BARY_GEPP)
-static inline void barycentric_coordinates(double* R, const double* P, const double* A, const double* B, const double* C){
+static void barycentric_coordinates(double* R, const double* P, const double* A, const double* B, const double* C){
     double v0[3], v1[3], v2[3];
     ntcd__vec3_sub(v0, B, A);
     ntcd__vec3_sub(v1, C, A);
@@ -387,7 +402,7 @@ typedef struct{
     double max_vert2_;
 }ntcd__simplex;
 
-static inline void ntcd__simplex_initialize(ntcd__simplex* simplex){
+static void ntcd__simplex_initialize(ntcd__simplex* simplex){
     simplex->bits_      = 0;
     simplex->last_sb_   = 0;
     simplex->size_      = 0;
@@ -402,7 +417,7 @@ static inline void ntcd__simplex_initialize(ntcd__simplex* simplex){
 //    }
 //}
 
-static inline void ntcd__simplex_add_point(ntcd__simplex* simplex, const double* point){
+static void ntcd__simplex_add_point(ntcd__simplex* simplex, const double* point){
     unsigned char b = ~simplex->bits_; //Flip bits
     b &= -b; //Last set (available) bit
     unsigned char pos = s_pos[b]; //Get the bit position from the lookup table
@@ -414,18 +429,18 @@ static inline void ntcd__simplex_add_point(ntcd__simplex* simplex, const double*
     if(l2 > simplex->max_vert2_) simplex->max_vert2_ = l2;
 }
 
-static inline void ntcd__simplex_add_point_with_info(ntcd__simplex* simplex, const double* point, const double* pa, const double* pb){
+static void ntcd__simplex_add_point_with_info(ntcd__simplex* simplex, const double* point, const double* pa, const double* pb){
     ntcd__simplex_add_point(simplex, point);
     memcpy(simplex->a_ + 3 * simplex->last_sb_, pa, 3 * sizeof(*pa));
     memcpy(simplex->b_ + 3 * simplex->last_sb_, pb, 3 * sizeof(*pb));
 }
 
-static inline void ntcd__simplex_remove_point(ntcd__simplex* simplex, int p){
+static void ntcd__simplex_remove_point(ntcd__simplex* simplex, int p){
     simplex->bits_ ^= (1 << p); //Erase the bit at position p
     --simplex->size_;
 }
 
-static inline int ntcd__simplex_contains(const ntcd__simplex* simplex, const double* point){
+static int ntcd__simplex_contains(const ntcd__simplex* simplex, const double* point){
     unsigned char bits = simplex->bits_;
     for(int i = 0; i < 4; ++i, bits >>= 1){
         if((bits & 1) && ntcd__vec3_equal(simplex->p_ + 3 * i, point)) return 1;
@@ -433,7 +448,7 @@ static inline int ntcd__simplex_contains(const ntcd__simplex* simplex, const dou
     return 0;
 }
 
-static inline void ntcd__simplex_translate(ntcd__simplex* simplex, const double* dr){
+static void ntcd__simplex_translate(ntcd__simplex* simplex, const double* dr){
     //for(int k = 0; k < 4; ++k) p_[k] += dr;
     simplex->max_vert2_ = 0.0;
     unsigned char bits = simplex->bits_;
@@ -982,6 +997,7 @@ void ntcd_gjk_distance(
     const ntcd_transform* pa, const void* ca,
     const ntcd_transform* pb, const void* cb
 ){
+
     double inv_rot_a[4], inv_rot_b[4];
     ntcd__quat_inverse(inv_rot_a, pa->rot);
     ntcd__quat_inverse(inv_rot_b, pb->rot);
@@ -1019,7 +1035,7 @@ void ntcd_gjk_distance(
         double new_point[3];
         ntcd__vec3_sub(new_point, vertex_a, vertex_b);
 
-        if(ntcd__simplex_contains(&simplex, new_point) || dist2 - ntcd__vec3_dot(dir, new_point) <= dist2 * 1.0e-8){
+        if(ntcd__simplex_contains(&simplex, new_point) || dist2 - ntcd__vec3_dot(dir, new_point) <= dist2 * NTCD_GJK_RELATIVE_ERROR2){
             memcpy(dist, dir, 3 * sizeof(*dist));
             return;
         }
@@ -1029,7 +1045,7 @@ void ntcd_gjk_distance(
 
         dist2 = ntcd__vec3_length2(dir);
 
-        if(simplex.size_ == 4 || dist2 < 1.0e-12){
+        if(simplex.size_ == 4 || dist2 < NTCD_GJK_ERROR_TOLERANCE * simplex.max_vert2_){
             memset(dist, 0, 3 * sizeof(*dist));
             return;
         }
@@ -1083,7 +1099,7 @@ void ntcd_gjk_closest_points(
         double new_point[3];
         ntcd__vec3_sub(new_point, vertex_a, vertex_b);
 
-        if(ntcd__simplex_contains(&simplex, new_point) || dist2 - ntcd__vec3_dot(dir, new_point) <= dist2 * 1.0e-8){
+        if(ntcd__simplex_contains(&simplex, new_point) || dist2 - ntcd__vec3_dot(dir, new_point) <= dist2 * NTCD_GJK_RELATIVE_ERROR2){
             ntcd__simplex_compute_closest_points(&simplex, point_on_a, point_on_b, dir);
             return;
         }
@@ -1094,7 +1110,7 @@ void ntcd_gjk_closest_points(
 
         dist2 = ntcd__vec3_length2(dir);
 
-        if(simplex.size_ == 4 || dist2 < 1.0e-12){
+        if(simplex.size_ == 4 || dist2 < NTCD_GJK_ERROR_TOLERANCE * simplex.max_vert2_){
             memset(point_on_a, 0, 3 * sizeof(*point_on_a));
             memset(point_on_b, 0, 3 * sizeof(*point_on_b));
             return;
@@ -1115,8 +1131,6 @@ int ntcd_gjk_raycast(
     const double* ray_dir
 )
 {
-    static const double etol = 10.0 * DBL_EPSILON;
-
     double inv_rot_a[4], inv_rot_b[4];
     ntcd__quat_inverse(inv_rot_a, pa->rot);
     ntcd__quat_inverse(inv_rot_b, pb->rot);
@@ -1180,7 +1194,7 @@ int ntcd_gjk_raycast(
 
         dist2 = ntcd__vec3_length2(dir);
 
-        if(simplex.size_ == 4 || dist2 < etol * simplex.max_vert2_){
+        if(simplex.size_ == 4 || dist2 < NTCD_GJK_ERROR_TOLERANCE * simplex.max_vert2_){
             *distance = lambda;
             return 1;
         }
