@@ -1,3 +1,5 @@
+// LICENSE
+//
 // MIT License
 // 
 // Copyright (c) 2017 Nikos Tasios
@@ -19,6 +21,20 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+//
+//
+// USAGE
+//
+//   Include this file in whatever places neeed to refer to it. In ONE C/C++
+//   file, write:
+//      #define STB_TRUETYPE_IMPLEMENTATION
+//   before the #include of this file. This expands out the actual
+//   implementation into that C/C++ file.
+//
+//   To make the implementation private to the file that generates the implementation,
+//      #define STBTT_STATIC
+//
+//   Documentation: TODO (See test below for now)
 
 #ifdef NTCD_IMPLEMENTATION
 
@@ -425,9 +441,9 @@ typedef struct{
     unsigned char bits_;
     unsigned char last_sb_;
     unsigned char size_;
-    double p_[3 * 4]; //up to 4 points / 3-Simplex
-    double a_[3 * 4]; //up to 4 points / 3-Simplex
-    double b_[3 * 4]; //up to 4 points / 3-Simplex
+    double p_[3 * 4];
+    double a_[3 * 4];
+    double b_[3 * 4];
     double max_vert2_;
 }ntcd__simplex;
 
