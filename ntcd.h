@@ -72,7 +72,7 @@ extern "C"{
 //TODO: Make ntcd_transform customizable.
 typedef struct{
     double pos[3];
-    double rot[4];
+    double rot[4]; //Quaternion
     double size;
 }ntcd_transform;
 
