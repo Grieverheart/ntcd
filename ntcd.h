@@ -34,175 +34,16 @@
 //   To make the implementation private to the file that generates the implementation,
 //      #define STBTT_STATIC
 //
-//   Documentation: TODO (See test below for now)
+// DOCUMENTATION
+//
+//   Please read the comments in the 'Interface' section for documentation.
+//   Below you can find a usage example. The example can be copied to a separate
+//   file and compiled.
+//
 
-#ifdef NTCD_IMPLEMENTATION
-
-#ifndef NTCD_GJK_ERROR_TOLERANCE 
-#include <float.h>
-#define NTCD_GJK_ERROR_TOLERANCE 10.0 * DBL_EPSILON
-#endif
-
-#ifndef NTCD_GJK_RELATIVE_ERROR 
-#define NTCD_GJK_RELATIVE_ERROR 1.0e-4
-#define NTCD_GJK_RELATIVE_ERROR2 NTCD_GJK_RELATIVE_ERROR * NTCD_GJK_RELATIVE_ERROR
-#endif
-
-#endif
-
-//Interface
-#ifndef __NTCD_H__
-#define __NTCD_H__
-
-//TODO: Investigate raycast false positives on y-axis for cylinders.
-//TODO: Impelement EPA for penetration depth.
-//TODO: Implement Johnson's dstance algorithm as an alternative.
-//TODO: Add MPR?
-
-#ifdef NTCD_STATIC
-#define NTCD_DEF static
-#else
-#define NTCD_DEF extern
-#endif
-
-#ifdef __cplusplus
-extern "C"{
-#endif
-
-//TODO: Make ntcd_transform customizable.
-typedef struct{
-    double pos[3];
-    double rot[4]; //Quaternion
-    double size;
-}ntcd_transform;
-
-typedef void (*ntcd_support)(double*, const void*, const double*);
-
-NTCD_DEF int ntcd_gjk_boolean(const ntcd_transform*, const void*, const ntcd_transform*, const void*);
-NTCD_DEF void ntcd_gjk_distance(double* dist_vec, const ntcd_transform*, const void*, const ntcd_transform*, const void*);
-NTCD_DEF void ntcd_gjk_closest_points(double* point_on_a, double* point_on_b, const ntcd_transform*, const void*, const ntcd_transform*, const void*);
-NTCD_DEF int ntcd_gjk_raycast(double* distance, double* normal, const ntcd_transform*, const void*, const ntcd_transform*, const void*, const double* ray_dir);
-
-//Shapes
-//NOTE: The long axis of a shape is defined to be along the y axis.
-
-//Current supported shapes:
-//Sphere, Point, Line, Mesh, Cylinder, Box, Cone, Bicone,
-//Leaf Cylinder, Sphere-swept, Hull, Minkowski
-
-//Sphere
-typedef struct{
-    ntcd_support support;
-}ntcd_sphere;
-NTCD_DEF void ntcd_sphere_initialize(ntcd_sphere* sph);
-
-//Point
-typedef struct{
-    ntcd_support support;
-}ntcd_point;
-NTCD_DEF void ntcd_point_initialize(ntcd_point* point);
-
-//Line
-typedef struct{
-    ntcd_support support;
-}ntcd_line;
-NTCD_DEF void ntcd_line_initialize(ntcd_line* line);
-
-//Disk
-typedef struct{
-    ntcd_support support;
-}ntcd_disk;
-NTCD_DEF void ntcd_disk_initialize(ntcd_disk* disk);
-
-//Mesh
-typedef struct{
-    ntcd_support support;
-    unsigned int n_vertices_;
-    double* vertices_;
-    unsigned int* n_vert_neighbours_;
-    unsigned int** vert_neighbours_;
-}ntcd_mesh;
-NTCD_DEF void ntcd_mesh_initialize(ntcd_mesh* mesh, const unsigned int n_vertices, const double* vertices, const unsigned int n_faces, const unsigned int* face_start, const unsigned int* faces);
-NTCD_DEF void ntcd_mesh_terminate(ntcd_mesh* mesh);
-
-//Cylinder
-typedef struct{
-    ntcd_support support;
-    double base_radius_, half_height_;
-}ntcd_cylinder;
-NTCD_DEF void ntcd_cylinder_initialize(ntcd_cylinder* cyl, double base_radius, double height);
-
-//Box
-typedef struct{
-    ntcd_support support;
-    double extent_[3];
-}ntcd_box;
-NTCD_DEF void ntcd_box_initialize(ntcd_box* box, const double* extent);
-
-//Cone
-typedef struct{
-    ntcd_support support;
-    double base_radius_, half_height_;
-    double sintheta_;
-}ntcd_cone;
-NTCD_DEF void ntcd_cone_initialize(ntcd_cone* cone, double base_radius, double height);
-
-//Bicone
-typedef struct{
-    ntcd_support support;
-    double base_radius_, half_height_;
-    double sintheta_;
-}ntcd_bicone;
-NTCD_DEF void ntcd_bicone_initialize(ntcd_bicone* bicone, double base_radius, double height);
-
-//Leaf Cylinder
-typedef struct{
-    ntcd_support support;
-    double half_width_, half_length_, half_height_;
-    double circle_radius_, circle_distance_;
-}ntcd_leaf_cylinder;
-NTCD_DEF void ntcd_leaf_cylinder_initialize(ntcd_leaf_cylinder* leaf, double width, double length, double height);
-
-//Sphere-swept
-typedef struct{
-    ntcd_support support;
-    const void* shape_;
-}ntcd_sphere_swept;
-NTCD_DEF void ntcd_sphere_swept_initialize(ntcd_sphere_swept* msum, const void* shape);
-
-//Hull
-typedef struct{
-    ntcd_support support;
-    const void* ca_;
-    const void* cb_;
-    ntcd_transform ta_;
-    ntcd_transform tb_;
-    //Cache inverse rotations.
-    double inv_rot_a_[4];
-    double inv_rot_b_[4];
-}ntcd_hull;
-NTCD_DEF void ntcd_hull_initialize(ntcd_hull* hull, const ntcd_transform* ta, const void* ca, const ntcd_transform* tb, const void* cb);
-
-//Minkowski
-typedef struct{
-    ntcd_support support;
-    const void* ca_;
-    const void* cb_;
-    ntcd_transform t_;
-    //Cache inverse rotation.
-    double inv_rot_[4];
-}ntcd_minkowski_sum;
-NTCD_DEF void ntcd_minkowski_sum_initialize(ntcd_minkowski_sum* msum, const ntcd_transform* t, const void* ca, const void* cb);
-
-#ifdef __cplusplus
-}
-#endif
-
-//Test
 #if 0
 #define NTCD_IMPLEMENTATION
 #include "ntcd.h"
-#undef NTCD_IMPLEMENTATION
 #include <math.h>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327950288
@@ -249,10 +90,266 @@ int main(int argc, char* argv[]){
 }
 #endif
 
+#ifdef NTCD_IMPLEMENTATION
+
+#ifndef NTCD_GJK_ERROR_TOLERANCE 
+#include <float.h>
+#define NTCD_GJK_ERROR_TOLERANCE 10.0 * DBL_EPSILON
+#endif
+
+#ifndef NTCD_GJK_RELATIVE_ERROR 
+#define NTCD_GJK_RELATIVE_ERROR 1.0e-4
+#define NTCD_GJK_RELATIVE_ERROR2 NTCD_GJK_RELATIVE_ERROR * NTCD_GJK_RELATIVE_ERROR
+#endif
+
+#endif
+
+//Interface (Read this part for documentation)
+#ifndef __NTCD_H__
+#define __NTCD_H__
+
+#ifdef NTCD_STATIC
+#define NTCD_DEF static
+#else
+#define NTCD_DEF extern
+#endif
+
+#ifdef __cplusplus
+extern "C"{
+#endif
+
+//Shape transform, consisting of the 3d position, the rotation in the form
+//of a quaternion, and the size, which scales the shape size. The struct
+//should be easy to replace with your own.
+typedef struct{
+    double pos[3];
+    double rot[4]; //Quaternion
+    double size;
+}ntcd_transform;
+
+//Type of the support function which GJK uses.
+typedef void (*ntcd_support)(double*, const void*, const double*);
+
+
+//Check if two shapes, ca and cb with transforms ta and tb respectively
+//overlap. Returns 1 if they overlap and 0 otherwise.
+NTCD_DEF int ntcd_gjk_boolean(
+    const ntcd_transform* ta, const void* ca,
+    const ntcd_transform* tb, const void* cb
+);
+
+//Calculate the closest distance dist_vec between two shapes, ca and cb with
+//transforms ta and tb respectively.
+NTCD_DEF void ntcd_gjk_distance(
+    double* dist_vec,
+    const ntcd_transform* ta, const void* ca,
+    const ntcd_transform* tb, const void* cb
+);
+
+//Calculate the closest points, point_on_a and point_on_b on shape, ca and cb
+//with transforms ta and tb respectively. The two outputs are zeroed in case
+//the two shapes overlap.
+NTCD_DEF void ntcd_gjk_closest_points(
+    double* point_on_a, double* point_on_b,
+    const ntcd_transform* ta, const void* ca,
+    const ntcd_transform* tb, const void* cb
+);
+
+//Calculate the distance shape ca with transform ta can be moved on a straight
+//line in the direction ray_dir before it meets shape cb with transform tb.
+//Returns 0 when shape ca does not meet cb, othewise it returns 1 if it succeeds.
+NTCD_DEF int ntcd_gjk_raycast(
+    double* distance, double* normal,
+    const ntcd_transform* ta, const void* ca,
+    const ntcd_transform* tb, const void* cb,
+    const double* ray_dir
+);
+
+//Shapes
+//NOTE: Be sure you know how each shape is originally oriented.
+
+//Current supported shapes:
+//
+//  Sphere, Point, Line, Mesh, Cylinder, Box, Cone, Bicone,
+//  Leaf Cylinder, Sphere-swept, Hull, Minkowski
+
+//Sphere
+//The sphere is of radius 1.
+typedef struct{
+    ntcd_support support;
+}ntcd_sphere;
+NTCD_DEF void ntcd_sphere_initialize(ntcd_sphere* sph);
+
+//Point
+typedef struct{
+    ntcd_support support;
+}ntcd_point;
+NTCD_DEF void ntcd_point_initialize(ntcd_point* point);
+
+//Line
+//The line is of length 1 and is parallel to the y-axis.
+typedef struct{
+    ntcd_support support;
+}ntcd_line;
+NTCD_DEF void ntcd_line_initialize(ntcd_line* line);
+
+//Disk
+//The disk is of radius 1 and its axis is parallel to the y-axis.
+typedef struct{
+    ntcd_support support;
+}ntcd_disk;
+NTCD_DEF void ntcd_disk_initialize(ntcd_disk* disk);
+
+//Mesh
+typedef struct{
+    ntcd_support support;
+    unsigned int n_vertices_;
+    double* vertices_;
+    unsigned int* n_vert_neighbours_;
+    unsigned int** vert_neighbours_;
+}ntcd_mesh;
+
+//Initializing a mesh is slightly involved. The mesh vertices and the vertex
+//indices of each face need to be passed. The vertices are passed as a flat array
+//of size 3 * n_vertices. Vertex i with i < n_vertices is given by (vertices + 3 * i).
+//The vertex indices of each face are also passed as a flat array. The array face_start
+//stores the array position inside faces where each face starts.
+//
+//As an example, suppose we would like to load a tetrahedron with edge length 2. The
+//4 vertices are located at,
+//
+//  { 1,  0, -1 / sqrt(2)},
+//  {-1,  0, -1 / sqrt(2)},
+//  { 0,  1,  1 / sqrt(2)},
+//  { 0, -1,  1 / sqrt(2)}
+//
+//The four faces are defined as (note that the order of face indices does not play
+//any role in our mesh implementation),
+//
+//  {0, 1, 2},
+//  {0, 1, 3},
+//  {0, 2, 3},
+//  {1, 2, 3}
+//
+//The vertices array passed would then look like,
+//
+//  vertices[] = {
+//      1,  0, -1 / sqrt(2), -1,  0, -1 / sqrt(2),
+//      0,  1,  1 / sqrt(2), 0, -1,  1 / sqrt(2)
+//  }
+//
+//while faces would look like,
+//
+//  faces[] = {0, 1, 2, 0, 1, 3, 0, 2, 3, 1, 2, 3}
+//
+//and face_start,
+//
+//  face_start[] = {0, 3, 6, 9}
+//
+//Also note that faces are not required to have 3 vertices, and that different faces
+//of the shame shape need not have the same number of vertices either.
+NTCD_DEF void ntcd_mesh_initialize(
+    ntcd_mesh* mesh,
+    const unsigned int n_vertices, const double* vertices,
+    const unsigned int n_faces, const unsigned int* face_start, const unsigned int* faces
+);
+
+NTCD_DEF void ntcd_mesh_terminate(ntcd_mesh* mesh);
+
+//Cylinder
+//The cylinder is of radius base_radius and height height, and its axis of symmetry is
+//parallel to the y-axis.
+typedef struct{
+    ntcd_support support;
+    double base_radius_, half_height_;
+}ntcd_cylinder;
+NTCD_DEF void ntcd_cylinder_initialize(ntcd_cylinder* cyl, double base_radius, double height);
+
+//Box
+//The length of each side of the box is give by the extent array.
+typedef struct{
+    ntcd_support support;
+    double extent_[3];
+}ntcd_box;
+NTCD_DEF void ntcd_box_initialize(ntcd_box* box, const double* extent);
+
+//Cone
+//The cone has a base radius base_radius and height height, and its axis of symmetry is
+//parallel to the y-axis.
+typedef struct{
+    ntcd_support support;
+    double base_radius_, half_height_;
+    double sintheta_;
+}ntcd_cone;
+NTCD_DEF void ntcd_cone_initialize(ntcd_cone* cone, double base_radius, double height);
+
+//Bicone
+//The bicone has a mid radius base_radius and height height, and its axis of symmetry is
+//parallel to the y-axis.
+typedef struct{
+    ntcd_support support;
+    double base_radius_, half_height_;
+    double sintheta_;
+}ntcd_bicone;
+NTCD_DEF void ntcd_bicone_initialize(ntcd_bicone* bicone, double base_radius, double height);
+
+//Leaf Cylinder
+typedef struct{
+    ntcd_support support;
+    double half_width_, half_length_, half_height_;
+    double circle_radius_, circle_distance_;
+}ntcd_leaf_cylinder;
+NTCD_DEF void ntcd_leaf_cylinder_initialize(ntcd_leaf_cylinder* leaf, double width, double length, double height);
+
+//Sphere-swept
+//The sphere swept shape is produced from a shape, by sweeping a sphere around the
+//shape's surface.
+typedef struct{
+    ntcd_support support;
+    const void* shape_;
+    double radius_;
+}ntcd_sphere_swept;
+NTCD_DEF void ntcd_sphere_swept_initialize(ntcd_sphere_swept* msum, double radius, const void* shape);
+
+//Hull
+//The convex hull of two shapes.
+typedef struct{
+    ntcd_support support;
+    const void* ca_;
+    const void* cb_;
+    ntcd_transform ta_;
+    ntcd_transform tb_;
+    //Cache inverse rotations.
+    double inv_rot_a_[4];
+    double inv_rot_b_[4];
+}ntcd_hull;
+NTCD_DEF void ntcd_hull_initialize(ntcd_hull* hull, const ntcd_transform* ta, const void* ca, const ntcd_transform* tb, const void* cb);
+
+//Minkowski
+//The minkowski sum of two shapes. The transform t is applied to the second shape, cb.
+typedef struct{
+    ntcd_support support;
+    const void* ca_;
+    const void* cb_;
+    ntcd_transform t_;
+    //Cache inverse rotation.
+    double inv_rot_[4];
+}ntcd_minkowski_sum;
+NTCD_DEF void ntcd_minkowski_sum_initialize(ntcd_minkowski_sum* msum, const ntcd_transform* t, const void* ca, const void* cb);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif //__NTCD_H__
 
 //Implementation
 #ifdef NTCD_IMPLEMENTATION
+
+//TODO: Investigate raycast false positives on y-axis for cylinders.
+//TODO: Impelement EPA for penetration depth.
+//TODO: Implement Johnson's dstance algorithm as an alternative.
+//TODO: Add MPR?
 
 #include <string.h>
 #include <math.h>
@@ -1489,14 +1586,6 @@ NTCD_DEF void ntcd_mesh_initialize(ntcd_mesh* mesh, const unsigned int n_vertice
     for(unsigned int fi = 0, eid = 0; fi < n_faces; ++fi){
         const unsigned int* face = faces + face_start[fi];
         unsigned int face_size = ((fi < n_faces - 1)? face_start[fi + 1]: n_vertices) - face_start[fi];
-        double normal[3];
-        {
-            double ab[3], ac[3];
-            ntcd__vec3_sub(ab, vertices + 3 * face[1], vertices + 3 * face[0]);
-            ntcd__vec3_sub(ac, vertices + 3 * face[face_size - 1], vertices + 3 * face[0]);
-            ntcd__vec3_cross(normal, ab, ac);
-        }
-        ntcd__vec3_smul(normal, ntcd__vec3_length(normal), normal);
 
         for(unsigned int fj = fi + 1; fj < n_faces; ++fj){
             unsigned int fcount = 0;
@@ -1564,12 +1653,13 @@ static void ntcd__support_sphere_swept(double* support_point, const void* shape,
     double sphere_point[3];
     ntcd__support_sphere(sphere_point, NULL, dir);
     support(support_point, swept.shape_, dir);
-    ntcd__vec3_add(support_point, support_point, sphere_point);
+    ntcd__vec3_fmadd(support_point, swept.radius_, sphere_point, support_point);
 }
 
-NTCD_DEF void ntcd_sphere_swept_initialize(ntcd_sphere_swept* swept, const void* shape){
+NTCD_DEF void ntcd_sphere_swept_initialize(ntcd_sphere_swept* swept, double radius, const void* shape){
     swept->support = ntcd__support_sphere_swept;
     swept->shape_  = shape;
+    swept->radius_ = radius;
 }
 
 //Hull
